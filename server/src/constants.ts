@@ -198,6 +198,7 @@ export const endpointTags: Record<ApiTag, string> = {
     'Endpoints to view, modify, and validate the system metadata, which includes information about things like admin onboarding status.',
   [ApiTag.Tags]:
     'A tag is a user-defined label that can be applied to assets for organizational purposes. Tags can also be hierarchical, allowing for parent-child relationships between tags.',
+  [ApiTag.TelegramAdmin]: 'Administrative endpoints for managing Telegram cloud storage integration.',
   [ApiTag.Timeline]:
     'Specialized endpoints related to the timeline implementation used in the web application. External applications or tools should not use or rely on these endpoints, as they are subject to change without notice.',
   [ApiTag.Trash]:

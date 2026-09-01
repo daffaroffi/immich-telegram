@@ -35,6 +35,7 @@ import { SharedLinkController } from 'src/controllers/shared-link.controller';
 import { StackController } from 'src/controllers/stack.controller';
 import { SyncController } from 'src/controllers/sync.controller';
 import { SystemConfigController } from 'src/controllers/system-config.controller';
+import { TelegramAdminController } from 'src/controllers/telegram-admin.controller';
 import { SystemMetadataController } from 'src/controllers/system-metadata.controller';
 import { TagController } from 'src/controllers/tag.controller';
 import { TimelineController } from 'src/controllers/timeline.controller';
@@ -84,6 +85,7 @@ export const controllers = [
   SyncController,
   SystemConfigController,
   SystemMetadataController,
+  TelegramAdminController,
   TagController,
   TimelineController,
   TrashController,

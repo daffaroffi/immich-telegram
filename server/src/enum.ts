@@ -1241,6 +1241,7 @@ export enum ApiTag {
   SystemConfig = 'System config',
   SystemMetadata = 'System metadata',
   Tags = 'Tags',
+  TelegramAdmin = 'Telegram (admin)',
   Timeline = 'Timeline',
   Trash = 'Trash',
   UsersAdmin = 'Users (admin)',

@@ -28,6 +28,7 @@ import { EventRepository } from 'src/repositories/event.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { ProcessRepository } from 'src/repositories/process.repository';
 import { StorageRepository } from 'src/repositories/storage.repository';
+import { TelegramStorageRepository } from 'src/repositories/telegram-storage.repository';
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
 import { teardownTelemetry, TelemetryRepository } from 'src/repositories/telemetry.repository';
 import { UserRepository } from 'src/repositories/user.repository';
@@ -116,6 +117,7 @@ export class ApiModule extends BaseModule {}
     ConfigRepository,
     LoggingRepository,
     StorageRepository,
+    TelegramStorageRepository,
     ProcessRepository,
     DatabaseRepository,
     UserRepository,

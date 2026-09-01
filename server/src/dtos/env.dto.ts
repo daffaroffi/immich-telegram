@@ -86,5 +86,25 @@ export const EnvSchema = z
     REDIS_PASSWORD: z.string().optional(),
     REDIS_SOCKET: z.string().optional(),
     REDIS_URL: z.string().optional(),
+
+    // === Telegram Storage Configuration ===
+    TELEGRAM_STORAGE_ENABLED: stringBool.optional(),
+    TELEGRAM_API_ID: z.coerce.number().int().optional(),
+    TELEGRAM_API_HASH: z.string().optional(),
+    TELEGRAM_SESSION_PATH: z.string().optional(),
+    TELEGRAM_CHAT_ID: z.coerce.bigint().optional(),
+    TELEGRAM_ENCRYPTION_ENABLED: stringBool.optional(),
+    TELEGRAM_VAULT_KEY: z.string().optional(),
+    TELEGRAM_CACHE_SIZE_MB: z.coerce.number().int().optional(),
+    TELEGRAM_CACHE_TTL_HOURS: z.coerce.number().int().optional(),
+    TELEGRAM_MAX_CONCURRENT_UPLOADS: z.coerce.number().int().optional(),
+    TELEGRAM_MAX_CONCURRENT_DOWNLOADS: z.coerce.number().int().optional(),
+    TELEGRAM_UPLOAD_DELAY_MS: z.coerce.number().int().optional(),
+    TELEGRAM_ACCOUNTS: z.string().optional(),
+    // Multi-account support (pattern: TELEGRAM_{ACCOUNT_ID}_API_ID, etc.)
+    TELEGRAM_PRIMARY_API_ID: z.coerce.number().int().optional(),
+    TELEGRAM_PRIMARY_API_HASH: z.string().optional(),
+    TELEGRAM_PRIMARY_SESSION: z.string().optional(),
+    TELEGRAM_PRIMARY_CHAT_ID: z.coerce.bigint().optional(),
   })
   .meta({ id: 'EnvDto' });
