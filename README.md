@@ -18,37 +18,36 @@
 </a>
 <br/>
 
-<p align="center">
-  <a href="readme_i18n/README_ca_ES.md">Català</a>
-  <a href="readme_i18n/README_es_ES.md">Español</a>
-  <a href="readme_i18n/README_fr_FR.md">Français</a>
-  <a href="readme_i18n/README_it_IT.md">Italiano</a>
-  <a href="readme_i18n/README_ja_JP.md">日本語</a>
-  <a href="readme_i18n/README_ko_KR.md">한국어</a>
-  <a href="readme_i18n/README_de_DE.md">Deutsch</a>
-  <a href="readme_i18n/README_nl_NL.md">Nederlands</a>
-  <a href="readme_i18n/README_tr_TR.md">Türkçe</a>
-  <a href="readme_i18n/README_zh_CN.md">简体中文</a>
-  <a href="readme_i18n/README_zh_TW.md">正體中文</a>
-  <a href="readme_i18n/README_uk_UA.md">Українська</a>
-  <a href="readme_i18n/README_ru_RU.md">Русский</a>
-  <a href="readme_i18n/README_bg_BG.md">Български</a>
-  <a href="readme_i18n/README_pt_BR.md">Português Brasileiro</a>
-  <a href="readme_i18n/README_sv_SE.md">Svenska</a>
-  <a href="readme_i18n/README_ar_JO.md">العربية</a>
-  <a href="readme_i18n/README_vi_VN.md">Tiếng Việt</a>
-  <a href="readme_i18n/README_th_TH.md">ภาษาไทย</a>
-  <a href="readme_i18n/README_ml_IN.md">മലയാളം</a>
-</p>
+## Telegram Storage Integration
 
+This fork includes **Telegram Cloud Storage** integration, providing unlimited free storage for your photo library.
 
-> [!WARNING]
-> ⚠️ Always follow [3-2-1](https://www.backblaze.com/blog/the-3-2-1-backup-strategy/) backup plan for your precious photos and videos!
-> 
- 
+| Feature | Description |
+|---------|-------------|
+| **Unlimited Storage** | No size limits, no monthly fees |
+| **TDENC2 Encryption** | XChaCha20-Poly1305 encryption before upload |
+| **Local Caching** | Fast thumbnail and preview loading |
+| **Multi-Account** | Rate limit distribution across accounts |
+| **Migration Tools** | Easy migration from local to Telegram storage |
 
-> [!NOTE]
-> You can find the main documentation, including installation guides, at https://immich.app/.
+**Quick Start:**
+```bash
+# 1. Get API credentials from https://my.telegram.org
+# 2. Create a private Telegram channel
+# 3. Add to your .env:
+TELEGRAM_STORAGE_ENABLED=true
+TELEGRAM_API_ID=your_api_id
+TELEGRAM_API_HASH=your_api_hash
+TELEGRAM_CHAT_ID=-100xxxxxxxxxx
+
+# 4. Run migration
+pnpm run migrations:run
+
+# 5. Start Immich
+docker compose up -d
+```
+
+For detailed setup instructions, see [TELEGRAM_STORAGE.md](./TELEGRAM_STORAGE.md).
 
 ## Links
 
@@ -56,20 +55,8 @@
 - [About](https://docs.immich.app/overview/introduction)
 - [Installation](https://docs.immich.app/install/requirements)
 - [Roadmap](https://immich.app/roadmap)
-- [Demo](#demo)
 - [Features](#features)
-- [Translations](https://docs.immich.app/developer/translations)
-- [Contributing](https://docs.immich.app/overview/support-the-project)
-
-## Demo
-
-Access the demo [here](https://demo.immich.app). For the mobile app, you can use `https://demo.immich.app` for the `Server Endpoint URL`.
-
-### Login credentials
-
-| Email           | Password |
-| --------------- | -------- |
-| demo@immich.app | demo     |
+- [Telegram Storage Setup](./TELEGRAM_STORAGE.md)
 
 ## Features
 
@@ -105,31 +92,4 @@ Access the demo [here](https://demo.immich.app). For the mobile app, you can use
 | Stacked Photos                               | Yes    | Yes |
 | Tags                                         | No     | Yes |
 | Folder View                                  | Yes    | Yes |
-
-## Translations
-
-Read more about translations [here](https://docs.immich.app/developer/translations).
-
-<a href="https://hosted.weblate.org/engage/immich/">
-<img src="https://hosted.weblate.org/widget/immich/immich/multi-auto.svg" alt="Translation status" />
-</a>
-
-## Repository activity
-
-![Activities](https://repobeats.axiom.co/api/embed/9e86d9dc3ddd137161f2f6d2e758d7863b1789cb.svg "Repobeats analytics image")
-
-## Star history
-
-<a href="https://star-history.com/#immich-app/immich&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=immich-app/immich&type=date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=immich-app/immich&type=date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=immich-app/immich&type=date" width="100%" />
- </picture>
-</a>
-
-## Contributors
-
-<a href="https://github.com/immich-app/immich/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=immich-app/immich" width="100%"/>
-</a>
+| **Telegram Cloud Storage**                   | Yes    | Yes |
