@@ -41,6 +41,7 @@ import { SharedLinkAssetRepository } from 'src/repositories/shared-link-asset.re
 import { SharedLinkRepository } from 'src/repositories/shared-link.repository';
 import { StackRepository } from 'src/repositories/stack.repository';
 import { StorageRepository } from 'src/repositories/storage.repository';
+import { TelegramStorageRepository } from 'src/repositories/telegram-storage.repository';
 import { SyncCheckpointRepository } from 'src/repositories/sync-checkpoint.repository';
 import { SyncRepository } from 'src/repositories/sync.repository';
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
@@ -98,6 +99,7 @@ export const repositories = [
   SharedLinkAssetRepository,
   StackRepository,
   StorageRepository,
+  TelegramStorageRepository,
   SyncRepository,
   SyncCheckpointRepository,
   SystemMetadataRepository,

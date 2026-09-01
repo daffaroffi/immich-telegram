@@ -53,6 +53,7 @@ export const newStorageRepositoryMock = (): Mocked<RepositoryInterface<StorageRe
     createGzip: vitest.fn(),
     createGunzip: vitest.fn(),
     readFile: vitest.fn(),
+    readFileSlice: vitest.fn(),
     readJsonFile: vitest.fn() as Mocked<StorageRepository>['readJsonFile'],
     readdirWithTypes: vitest.fn(),
     createFile: vitest.fn(),

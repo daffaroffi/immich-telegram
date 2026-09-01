@@ -17,6 +17,10 @@ import path from 'node:path';
 import { PassThrough, Readable, Writable } from 'node:stream';
 import { createGunzip, createGzip } from 'node:zlib';
 import { CrawlOptionsDto, WalkOptionsDto } from 'src/dtos/library.dto';
+import { IStorageProvider, ImmichReadStream, ImmichZipStream, DiskUsage } from 'src/repositories/storage.interface';
+
+// Re-export types for backward compatibility
+export { ImmichReadStream, ImmichZipStream, DiskUsage };
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { mimeTypes } from 'src/utils/mime-types';
 
@@ -28,26 +32,8 @@ export interface WatchEvents {
   onError(error: Error): void;
 }
 
-export interface ImmichReadStream {
-  stream: Readable;
-  type?: string;
-  disposition?: string | string[];
-  length?: number;
-}
-
-export interface ImmichZipStream extends ImmichReadStream {
-  addFile: (inputPath: string, filename: string) => void;
-  finalize: () => Promise<void>;
-}
-
-export interface DiskUsage {
-  available: number;
-  free: number;
-  total: number;
-}
-
 @Injectable()
-export class StorageRepository {
+export class StorageRepository implements IStorageProvider {
   constructor(private logger: LoggingRepository) {
     this.logger.setContext(StorageRepository.name);
   }
@@ -144,6 +130,10 @@ export class StorageRepository {
 
     // read everything
     return fs.readFile(filepath);
+  }
+
+  async readFileSlice(filepath: string, options: ReadOptionsWithBuffer<Buffer>): Promise<Buffer> {
+    return this.readFile(filepath, options);
   }
 
   async readJsonFile<T>(filepath: string): Promise<T> {

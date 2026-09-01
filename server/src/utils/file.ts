@@ -5,7 +5,7 @@ import { basename, extname } from 'node:path';
 import { promisify } from 'node:util';
 import { CacheControl } from 'src/enum';
 import { LoggingRepository } from 'src/repositories/logging.repository';
-import { ImmichReadStream } from 'src/repositories/storage.repository';
+import { ImmichReadStream } from 'src/repositories/storage.interface';
 import { isConnectionAborted } from 'src/utils/misc';
 
 export function getFileNameWithoutExtension(path: string): string {
@@ -80,6 +80,59 @@ export const sendFile = async (
     // log non-http errors
     if (!(error instanceof HttpException)) {
       logger.error(`Unable to send file: ${error}`, error.stack);
+    }
+
+    next(new NotFoundException());
+  }
+};
+
+/**
+ * Send a streamable file from a Readable stream
+ * Supports both local files and Telegram storage streaming
+ */
+export const sendStreamFile = async (
+  res: Response,
+  next: NextFunction,
+  handler: () => Promise<ImmichReadStream>,
+  logger: LoggingRepository,
+): Promise<void> => {
+  try {
+    const file = await handler();
+
+    const cacheControlHeader = cacheControlHeaders[CacheControl.PrivateWithCache];
+    if (cacheControlHeader) {
+      res.set('Cache-Control', cacheControlHeader);
+    }
+
+    if (file.type) {
+      res.header('Content-Type', file.type);
+    }
+
+    if (file.disposition) {
+      res.header('Content-Disposition', Array.isArray(file.disposition) ? file.disposition.join(', ') : file.disposition);
+    }
+
+    if (file.length) {
+      res.header('Content-Length', file.length.toString());
+    }
+
+    // Pipe the stream to response
+    file.stream.pipe(res);
+
+    // Handle stream errors
+    file.stream.on('error', (error) => {
+      if (!res.headersSent) {
+        logger.error(`Stream error: ${error}`, error.stack);
+        next(new NotFoundException());
+      }
+    });
+  } catch (error: Error | any) {
+    if (isConnectionAborted(error) || res.headersSent) {
+      return;
+    }
+
+    if (!(error instanceof HttpException)) {
+      logger.error(`Unable to send stream: ${error}`, error.stack);
     }
 
     next(new NotFoundException());
