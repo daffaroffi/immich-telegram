@@ -43,6 +43,10 @@ import { SyncService } from 'src/services/sync.service.js';
 import { SystemConfigService } from 'src/services/system-config.service.js';
 import { SystemMetadataService } from 'src/services/system-metadata.service.js';
 import { TagService } from 'src/services/tag.service.js';
+import { TelegramCryptoService } from 'src/services/telegram/crypto.service.js';
+import { TelegramMtprotoService } from 'src/services/telegram/mtproto.service.js';
+import { TelegramQuotaService } from 'src/services/telegram/quota.service.js';
+import { TelegramSyncService } from 'src/services/telegram/sync.service.js';
 import { TelemetryService } from 'src/services/telemetry.service.js';
 import { TimelineService } from 'src/services/timeline.service.js';
 import { TranscodingService } from 'src/services/transcoding.service.js';
@@ -100,6 +104,10 @@ export const services = [
   SystemConfigService,
   SystemMetadataService,
   TagService,
+  TelegramCryptoService,
+  TelegramMtprotoService,
+  TelegramQuotaService,
+  TelegramSyncService,
   TelemetryService,
   TimelineService,
   TranscodingService,

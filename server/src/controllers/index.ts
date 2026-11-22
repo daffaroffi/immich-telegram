@@ -38,6 +38,7 @@ import { SyncController } from 'src/controllers/sync.controller.js';
 import { SystemConfigController } from 'src/controllers/system-config.controller.js';
 import { SystemMetadataController } from 'src/controllers/system-metadata.controller.js';
 import { TagController } from 'src/controllers/tag.controller.js';
+import { TelegramAdminController } from 'src/controllers/telegram-admin.controller.js';
 import { TimelineController } from 'src/controllers/timeline.controller.js';
 import { TrashController } from 'src/controllers/trash.controller.js';
 import { UserAdminController } from 'src/controllers/user-admin.controller.js';
@@ -87,6 +88,7 @@ export const controllers = [
   SystemConfigController,
   SystemMetadataController,
   TagController,
+  TelegramAdminController,
   TimelineController,
   TrashController,
   UserAdminController,
