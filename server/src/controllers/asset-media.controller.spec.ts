@@ -4,6 +4,7 @@ import { AssetMediaStatus } from 'src/dtos/asset-media-response.dto.js';
 import { AssetMetadataKey } from 'src/enum.js';
 import { LoggingRepository } from 'src/repositories/logging.repository.js';
 import { AssetMediaService } from 'src/services/asset-media.service.js';
+import { TelegramRestoreService } from 'src/services/telegram/restore.service.js';
 import { factory } from 'test/small.factory.js';
 import { ControllerContext, automock, controllerSetup, mockBaseService } from 'test/utils.js';
 
@@ -32,6 +33,7 @@ describe(AssetMediaController.name, () => {
     ctx = await controllerSetup(AssetMediaController, [
       { provide: LoggingRepository, useValue: automock(LoggingRepository, { strict: false }) },
       { provide: AssetMediaService, useValue: service },
+      { provide: TelegramRestoreService, useValue: { ensureAvailable: async () => true } },
     ]);
     return () => ctx.close();
   });

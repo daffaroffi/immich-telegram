@@ -36,6 +36,7 @@ import { Auth, Authenticated, FileResponse } from 'src/middleware/auth.guard.js'
 import { FileUploadInterceptor, getFiles } from 'src/middleware/file-upload.interceptor.js';
 import { LoggingRepository } from 'src/repositories/logging.repository.js';
 import { AssetMediaService } from 'src/services/asset-media.service.js';
+import { TelegramRestoreService } from 'src/services/telegram/restore.service.js';
 import type { UploadFiles } from 'src/types.js';
 import { ImmichFileResponse, sendFile } from 'src/utils/file.js';
 import { FileNotEmptyValidator, UUIDParamDto } from 'src/validation.js';
@@ -46,6 +47,7 @@ export class AssetMediaController {
   constructor(
     private logger: LoggingRepository,
     private service: AssetMediaService,
+    private telegramRestore: TelegramRestoreService,
   ) {}
 
   @Post()
@@ -104,7 +106,16 @@ export class AssetMediaController {
     @Res() res: Response,
     @Next() next: NextFunction,
   ) {
-    await sendFile(res, next, () => this.service.downloadOriginal(auth, id, dto), this.logger);
+    await sendFile(
+      res,
+      next,
+      async () => {
+        const response = await this.service.downloadOriginal(auth, id, dto);
+        await this.telegramRestore.ensureAvailable(id, response.path);
+        return response;
+      },
+      this.logger,
+    );
   }
 
   @Get(':id/thumbnail')

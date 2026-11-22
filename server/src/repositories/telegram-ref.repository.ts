@@ -88,4 +88,16 @@ export class TelegramRefRepository {
       .execute();
     return rows.map((row) => row.id);
   }
+
+  /** Assets that still need a telegram backup, with the path to upload from. */
+  async listPendingUpload(limit: number): Promise<{ assetId: string; originalPath: string }[]> {
+    return this.db
+      .selectFrom('asset')
+      .leftJoin('telegram_ref', 'telegram_ref.assetId', 'asset.id')
+      .where('telegram_ref.assetId', 'is', null)
+      .where('asset.originalPath', 'is not', null)
+      .select(['asset.id as assetId', 'asset.originalPath as originalPath'])
+      .limit(limit)
+      .execute();
+  }
 }

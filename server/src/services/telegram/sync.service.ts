@@ -71,13 +71,50 @@ export class TelegramSyncService {
     void this.drain();
   }
 
-  /** Backfill: queue every asset that has no telegram_ref row yet. */
+  /**
+   * Backfill: queue every asset that has no telegram_ref row yet, resolving the
+   * on-disk path from the asset table. Returns how many were queued.
+   */
   async backfill(limit = 5000): Promise<number> {
-    const ids = await this.refRepository.listUnbacked(limit);
-    // paths for backfill are resolved lazily in drain() via the asset file table;
-    // for a first implementation we require callers to pass full paths, so this
-    // method reports how many remain instead of attempting path resolution.
-    return ids.length;
+    const pending = await this.refRepository.listPendingUpload(limit);
+    for (const row of pending) {
+      this.enqueue({ assetId: row.assetId, originalPath: row.originalPath, checksum: null });
+    }
+    return pending.length;
+  }
+
+  /**
+   * Restore an asset's original file from Telegram to `targetPath`.
+   * Used as a fallback when the on-disk copy has gone missing.
+   * Returns true when the file was restored.
+   */
+  async restoreTo(assetId: string, targetPath: string): Promise<boolean> {
+    const ref = await this.refRepository.get(assetId);
+    if (!ref) {
+      return false;
+    }
+
+    const vaultKey = this.configRepository.getEnv().telegram.vaultKey;
+    if (ref.encrypted && !vaultKey) {
+      this.logger.error(`Asset ${assetId} is encrypted but TELEGRAM_VAULT_KEY is not set; cannot restore`);
+      return false;
+    }
+
+    await this.mtproto.connect();
+
+    const downloadPath = ref.encrypted ? `${targetPath}.encrypted` : targetPath;
+    try {
+      await this.mtproto.downloadFile(ref.messageId, downloadPath);
+      if (ref.encrypted) {
+        await this.crypto.decryptFile(downloadPath, targetPath, vaultKey!);
+      }
+      this.logger.log(`Restored asset ${assetId} from telegram message ${ref.messageId}`);
+      return true;
+    } finally {
+      if (ref.encrypted) {
+        await rm(downloadPath, { force: true });
+      }
+    }
   }
 
   private async drain(): Promise<void> {
