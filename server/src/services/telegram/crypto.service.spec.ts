@@ -12,7 +12,7 @@ describe(TelegramCryptoService.name, () => {
 
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), 'tg-crypto-'));
-    sut = new TelegramCryptoService(LoggingRepository.create({}));
+    sut = new TelegramCryptoService(LoggingRepository.create(TelegramCryptoService.name));
   });
 
   it('roundtrips a small buffer', () => {
