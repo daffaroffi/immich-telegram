@@ -103,6 +103,16 @@ export const envData: EnvData = {
     },
   },
 
+  telegram: {
+    enabled: false,
+    apiId: 0,
+    apiHash: '',
+    chatId: 0n,
+    sessionPath: '/config/telegram.session',
+    vaultKey: null,
+    dailyUploadLimitMb: 2048,
+  },
+
   noColor: false,
 };
 

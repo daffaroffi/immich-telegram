@@ -113,6 +113,7 @@
     "sirv": "^3.0.0",
     "socket.io": "^4.8.1",
     "tailwindcss-preset-email": "^1.4.0",
+    "telegram": "^2.26.22",
     "thumbhash": "^0.1.1",
     "transformation-matrix": "^3.1.0",
     "ua-parser-js": "^2.0.0",

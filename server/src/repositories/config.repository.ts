@@ -126,6 +126,16 @@ export interface EnvData {
     };
   };
 
+  telegram: {
+    enabled: boolean;
+    apiId: number;
+    apiHash: string;
+    chatId: bigint;
+    sessionPath: string;
+    vaultKey: Buffer | null;
+    dailyUploadLimitMb: number;
+  };
+
   noColor: boolean;
   nodeVersion?: string;
 }
@@ -395,6 +405,16 @@ const getEnv = (): EnvData => {
         allow: dto.IMMICH_ALLOW_EXTERNAL_PLUGINS ?? false,
         installFolder: dto.IMMICH_PLUGINS_INSTALL_FOLDER,
       },
+    },
+
+    telegram: {
+      enabled: !!dto.TELEGRAM_STORAGE_ENABLED,
+      apiId: dto.TELEGRAM_API_ID ?? 0,
+      apiHash: dto.TELEGRAM_API_HASH ?? '',
+      chatId: dto.TELEGRAM_CHAT_ID ?? 0n,
+      sessionPath: dto.TELEGRAM_SESSION_PATH ?? '/config/telegram.session',
+      vaultKey: dto.TELEGRAM_VAULT_KEY ? Buffer.from(dto.TELEGRAM_VAULT_KEY, 'hex') : null,
+      dailyUploadLimitMb: dto.TELEGRAM_DAILY_UPLOAD_LIMIT_MB ?? 2048,
     },
 
     noColor: !!dto.NO_COLOR,

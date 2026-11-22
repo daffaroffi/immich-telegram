@@ -86,5 +86,12 @@ export const EnvSchema = z
     REDIS_PASSWORD: z.string().optional(),
     REDIS_SOCKET: z.string().optional(),
     REDIS_URL: z.string().optional(),
+    TELEGRAM_STORAGE_ENABLED: stringBool.optional(),
+    TELEGRAM_API_ID: z.coerce.number().int().optional(),
+    TELEGRAM_API_HASH: z.string().optional(),
+    TELEGRAM_CHAT_ID: z.coerce.bigint().optional(),
+    TELEGRAM_SESSION_PATH: z.string().optional(),
+    TELEGRAM_VAULT_KEY: z.string().optional(),
+    TELEGRAM_DAILY_UPLOAD_LIMIT_MB: z.coerce.number().int().optional(),
   })
   .meta({ id: 'EnvDto' });

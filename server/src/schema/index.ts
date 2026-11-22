@@ -86,6 +86,7 @@ import { SystemMetadataTable } from 'src/schema/tables/system-metadata.table.js'
 import { TagAssetTable } from 'src/schema/tables/tag-asset.table.js';
 import { TagClosureTable } from 'src/schema/tables/tag-closure.table.js';
 import { TagTable } from 'src/schema/tables/tag.table.js';
+import { TelegramRefTable } from 'src/schema/tables/telegram-ref.table.js';
 import { UserAuditTable } from 'src/schema/tables/user-audit.table.js';
 import { UserMetadataAuditTable } from 'src/schema/tables/user-metadata-audit.table.js';
 import { UserMetadataTable } from 'src/schema/tables/user-metadata.table.js';
@@ -295,6 +296,8 @@ export interface DB {
   tag: TagTable;
   tag_asset: TagAssetTable;
   tag_closure: TagClosureTable;
+
+  telegram_ref: TelegramRefTable;
 
   user: UserTable;
   user_audit: UserAuditTable;
