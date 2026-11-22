@@ -180,26 +180,28 @@ export class TelegramMtprotoService implements OnModuleInit, OnModuleDestroy {
     const client = await this.ensureClient();
     const gramjs = await this.loadGramjs();
 
-    const uploaded = await client.uploadFile({
-      file: createReadStream(filePath),
-      workers: 1,
+    return this.withFloodWait('upload', async () => {
+      const uploaded = await client.uploadFile({
+        file: createReadStream(filePath),
+        workers: 1,
+      });
+
+      const result = await client.sendMessage(config.chatId.toString(), {
+        file: uploaded,
+        forceDocument: true,
+        attributes: [new gramjs.Api.DocumentAttributeFilename({ fileName })],
+      });
+
+      const messageId = Number(result.id);
+      this.logger.log(`Uploaded ${fileName} to Telegram (message ${messageId})`);
+
+      return {
+        messageId,
+        chatId: config.chatId,
+        size: uploaded.size ?? 0,
+        fileId: `tg:${config.chatId}:${messageId}`,
+      };
     });
-
-    const result = await client.sendMessage(config.chatId.toString(), {
-      file: uploaded,
-      forceDocument: true,
-      attributes: [new gramjs.Api.DocumentAttributeFilename({ fileName })],
-    });
-
-    const messageId = Number(result.id);
-    this.logger.log(`Uploaded ${fileName} to Telegram (message ${messageId})`);
-
-    return {
-      messageId,
-      chatId: config.chatId,
-      size: uploaded.size ?? 0,
-      fileId: `tg:${config.chatId}:${messageId}`,
-    };
   }
 
   /** Download a previously uploaded file into a local path. */
@@ -207,21 +209,51 @@ export class TelegramMtprotoService implements OnModuleInit, OnModuleDestroy {
     const config = this.assertConfigured();
     const client = await this.ensureClient();
 
-    const messages = await client.getMessages(config.chatId.toString(), { ids: [messageId] });
-    const message = messages?.[0];
-    if (!message?.media) {
-      throw new Error(`Telegram message ${messageId} has no media`);
-    }
+    return this.withFloodWait('download', async () => {
+      const messages = await client.getMessages(config.chatId.toString(), { ids: [messageId] });
+      const message = messages?.[0];
+      if (!message?.media) {
+        throw new Error(`Telegram message ${messageId} has no media`);
+      }
 
-    await mkdir(dirname(targetPath), { recursive: true });
-    const buffer = await client.downloadMedia(message);
-    if (!Buffer.isBuffer(buffer)) {
-      throw new Error(`Telegram download for message ${messageId} did not return a buffer`);
-    }
+      await mkdir(dirname(targetPath), { recursive: true });
+      const buffer = await client.downloadMedia(message);
+      if (!Buffer.isBuffer(buffer)) {
+        throw new Error(`Telegram download for message ${messageId} did not return a buffer`);
+      }
 
-    await writeFile(targetPath, buffer);
-    this.logger.log(`Downloaded message ${messageId} to ${targetPath} (${buffer.length} bytes)`);
-    return buffer.length;
+      await writeFile(targetPath, buffer);
+      this.logger.log(`Downloaded message ${messageId} to ${targetPath} (${buffer.length} bytes)`);
+      return buffer.length;
+    });
+  }
+
+  /**
+   * Retry a Telegram call when the server answers with FLOOD_WAIT_x.
+   * Telegram rate limits are seconds-based and recoverable, so waiting is the
+   * correct response; anything else propagates to the caller.
+   */
+  private async withFloodWait<T>(operation: string, run: () => Promise<T>): Promise<T> {
+    const maxAttempts = 5;
+
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await run();
+      } catch (error: unknown) {
+        const seconds = parseFloodWaitSeconds(error);
+        if (seconds === null) {
+          throw error;
+        }
+        if (attempt >= maxAttempts) {
+          this.logger.error(`Telegram ${operation} still rate limited after ${maxAttempts} attempts`);
+          throw error;
+        }
+        // cap a single wait so a pathological FLOOD_WAIT cannot hang the queue
+        const delay = Math.min(seconds, 15 * 60);
+        this.logger.warn(`Telegram ${operation} rate limited; waiting ${delay}s (attempt ${attempt}/${maxAttempts})`);
+        await new Promise((resolve) => setTimeout(resolve, delay * 1000));
+      }
+    }
   }
 
   /** Delete a stored file (used by restore/cleanup and verification). */
@@ -242,4 +274,19 @@ export class TelegramMtprotoService implements OnModuleInit, OnModuleDestroy {
       dailyUploadLimitMb: config.dailyUploadLimitMb,
     };
   }
+}
+
+/** Extract the wait duration from a gramjs FLOOD_WAIT error, or null when absent. */
+function parseFloodWaitSeconds(error: unknown): number | null {
+  const message = error instanceof Error ? error.message : String(error);
+  const match = /FLOOD_WAIT_(\d+)/.exec(message);
+  if (match) {
+    return Number(match[1]);
+  }
+  // gramjs sometimes surfaces the code as a numeric property instead
+  const seconds = (error as { seconds?: unknown } | null)?.seconds;
+  if (typeof seconds === 'number' && Number.isFinite(seconds)) {
+    return seconds;
+  }
+  return null;
 }
