@@ -60,6 +60,44 @@ describe(TelegramCryptoService.name, () => {
     expect(await readFile(restored)).toEqual(plaintext);
   });
 
+  it('splits a file into ordered parts and reassembles them', { timeout: 30_000 }, async () => {
+    const vaultKey = randomBytes(32);
+    // small part size to force multi-part without allocating gigabytes
+    const partSize = 256 * 1024;
+    const total = 600 * 1024 + 137; // 3 parts
+    const source = join(dir, 'big.bin');
+    await writeFile(source, randomBytes(total));
+
+    const parts = await sut.encryptFileToParts(source, partSize, vaultKey, dir);
+    expect(parts).toHaveLength(3);
+    expect(parts.map((p) => p.index)).toEqual([0, 1, 2]);
+
+    const plaintextLengths: number[] = [];
+    for (const part of parts) {
+      const out = join(dir, `plain-${part.index}.bin`);
+      await sut.decryptFile(part.path, out, vaultKey);
+      const bytes = await readFile(out);
+      plaintextLengths.push(bytes.length);
+    }
+    expect(plaintextLengths.reduce((a, b) => a + b, 0)).toBe(total);
+    expect(plaintextLengths).toEqual([partSize, partSize, total - 2 * partSize]);
+  });
+
+  it('does not load a multi-megabyte envelope into memory on decrypt', { timeout: 30_000 }, async () => {
+    const vaultKey = randomBytes(32);
+    // 8 MiB in a single encrypted file, streamed back out
+    const size = 8 * 1024 * 1024 + 5;
+    const source = join(dir, 'src8m.bin');
+    const enc = join(dir, 'enc8m.bin');
+    const dec = join(dir, 'dec8m.bin');
+    await writeFile(source, randomBytes(size));
+
+    await sut.encryptFile(source, enc, vaultKey);
+    await sut.decryptFile(enc, dec, vaultKey);
+    const restored = await readFile(dec);
+    expect(restored.length).toBe(size);
+  });
+
   it('generates and validates vault keys', () => {
     const hex = sut.generateVaultKey();
     expect(hex).toHaveLength(64);

@@ -271,7 +271,7 @@ export class TelegramMtprotoService implements OnModuleInit, OnModuleDestroy {
       connected: this.isConnected,
       chatId: config.chatId.toString(),
       sessionPath: config.sessionPath,
-      dailyUploadLimitMb: config.dailyUploadLimitMb,
+      maxPartBytes: config.maxPartBytes,
     };
   }
 }

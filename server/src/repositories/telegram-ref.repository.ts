@@ -1,11 +1,12 @@
 import { Kysely } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { DB } from 'src/schema/index.js';
-import type { Insertable, Updateable } from 'kysely';
 import { asUuid } from 'src/utils/database.js';
 
-export interface TelegramRef {
+export interface TelegramRefPart {
   assetId: string;
+  partIndex: number;
+  totalParts: number;
   messageId: number;
   chatId: number;
   size: number;
@@ -14,8 +15,10 @@ export interface TelegramRef {
   uploadedAt: Date;
 }
 
-export interface TelegramRefCreate {
+export interface TelegramRefPartCreate {
   assetId: string;
+  partIndex: number;
+  totalParts: number;
   messageId: number;
   chatId: bigint;
   size: number;
@@ -23,42 +26,78 @@ export interface TelegramRefCreate {
   encrypted?: boolean;
 }
 
+/** Aggregate view across every part of one asset. */
+export interface TelegramRefSummary {
+  assetId: string;
+  totalParts: number;
+  encrypted: boolean;
+  checksum: string | null;
+  parts: { partIndex: number; messageId: number; chatId: bigint; size: number }[];
+}
+
 export class TelegramRefRepository {
   constructor(@InjectKysely() private db: Kysely<DB>) {}
 
-  async create(ref: TelegramRefCreate): Promise<void> {
+  /** Insert (or replace) one part. Idempotent on (assetId, partIndex). */
+  async createPart(part: TelegramRefPartCreate): Promise<void> {
     const values = {
-      assetId: asUuid(ref.assetId),
-      messageId: ref.messageId,
-      chatId: Number(ref.chatId),
-      size: ref.size,
-      checksum: ref.checksum ?? null,
-      encrypted: ref.encrypted ?? true,
-    };
-    const updateValues = {
-      messageId: ref.messageId,
-      chatId: Number(ref.chatId),
-      size: ref.size,
-      checksum: ref.checksum ?? null,
-      encrypted: ref.encrypted ?? true,
+      assetId: asUuid(part.assetId),
+      partIndex: part.partIndex,
+      totalParts: part.totalParts,
+      messageId: part.messageId,
+      chatId: Number(part.chatId),
+      size: part.size,
+      checksum: part.checksum ?? null,
+      encrypted: part.encrypted ?? true,
     };
     await this.db
       .insertInto('telegram_ref')
       .values(values as never)
-      .onConflict((oc) => oc.column('assetId').doUpdateSet(updateValues as never))
+      .onConflict((oc) =>
+        oc.columns(['assetId', 'partIndex']).doUpdateSet({
+          totalParts: part.totalParts,
+          messageId: part.messageId,
+          chatId: Number(part.chatId),
+          size: part.size,
+          checksum: part.checksum ?? null,
+          encrypted: part.encrypted ?? true,
+        } as never),
+      )
       .execute();
   }
 
-  async get(assetId: string): Promise<TelegramRef | undefined> {
-    return this.db
+  /** Every part of one asset, in part order, or undefined when not backed up. */
+  async getSummary(assetId: string): Promise<TelegramRefSummary | undefined> {
+    const rows = await this.db
       .selectFrom('telegram_ref')
       .selectAll()
       .where('assetId', '=', asUuid(assetId))
-      .executeTakeFirst();
+      .orderBy('partIndex', 'asc')
+      .execute();
+    if (rows.length === 0) {
+      return undefined;
+    }
+    return {
+      assetId,
+      totalParts: rows[0].totalParts,
+      encrypted: rows[0].encrypted,
+      checksum: rows[0].checksum,
+      parts: rows.map((row) => ({
+        partIndex: row.partIndex,
+        messageId: row.messageId,
+        chatId: BigInt(row.chatId),
+        size: Number(row.size),
+      })),
+    };
   }
 
-  async getByMessageId(messageId: number): Promise<TelegramRef | undefined> {
-    return this.db.selectFrom('telegram_ref').selectAll().where('messageId', '=', messageId).executeTakeFirst();
+  async has(assetId: string): Promise<boolean> {
+    const row = await this.db
+      .selectFrom('telegram_ref')
+      .select((eb) => eb.lit(1).as('x'))
+      .where('assetId', '=', asUuid(assetId))
+      .executeTakeFirst();
+    return !!row;
   }
 
   async delete(assetId: string): Promise<void> {
@@ -73,20 +112,16 @@ export class TelegramRefRepository {
     return Number(row.n);
   }
 
-  async list(limit = 100): Promise<TelegramRef[]> {
-    return this.db.selectFrom('telegram_ref').selectAll().orderBy('uploadedAt', 'desc').limit(limit).execute();
+  async countAssets(): Promise<number> {
+    const rows = await this.db
+      .selectFrom('telegram_ref')
+      .select('assetId')
+      .execute();
+    return new Set(rows.map((row) => row.assetId)).size;
   }
 
-  /** Return asset ids that have a local file but no telegram_ref row yet. */
-  async listUnbacked(limit: number): Promise<string[]> {
-    const rows = await this.db
-      .selectFrom('asset')
-      .leftJoin('telegram_ref', 'telegram_ref.assetId', 'asset.id')
-      .where('telegram_ref.assetId', 'is', null)
-      .select(['asset.id'])
-      .limit(limit)
-      .execute();
-    return rows.map((row) => row.id);
+  async list(limit = 100): Promise<TelegramRefPart[]> {
+    return this.db.selectFrom('telegram_ref').selectAll().orderBy('uploadedAt', 'desc').limit(limit).execute();
   }
 
   /** Assets that still need a telegram backup, with the path to upload from. */

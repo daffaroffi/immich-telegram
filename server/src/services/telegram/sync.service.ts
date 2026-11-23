@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { rm, stat } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { OnEvent } from 'src/decorators.js';
@@ -11,7 +11,6 @@ import { LoggingRepository } from 'src/repositories/logging.repository.js';
 import { TelegramRefRepository } from 'src/repositories/telegram-ref.repository.js';
 import { TelegramCryptoService } from 'src/services/telegram/crypto.service.js';
 import { TelegramMtprotoService } from 'src/services/telegram/mtproto.service.js';
-import { TelegramQuotaService } from 'src/services/telegram/quota.service.js';
 
 interface QueueItem {
   assetId: string;
@@ -24,11 +23,9 @@ interface QueueItem {
  * enabled, uploads the original file (encrypted) to the configured channel and
  * records the mapping in `telegram_ref`.
  *
- * The on-disk copy remains the source of truth; Telegram is an off-ledger
- * backup with automatic restore (see restore in asset-media.service).
- *
- * Uploads are serialized and throttled by the daily budget. Files queued after
- * the budget is exhausted are deferred (kept in memory), not lost.
+ * Telegram has a hard per-file cap (2 GB free / 4 GB premium) and no daily
+ * limit, so large originals are split into independent encrypted parts and
+ * uploaded as separate messages. Uploads are serialized.
  */
 @Injectable()
 export class TelegramSyncService {
@@ -40,7 +37,6 @@ export class TelegramSyncService {
     private refRepository: TelegramRefRepository,
     private crypto: TelegramCryptoService,
     private mtproto: TelegramMtprotoService,
-    private quota: TelegramQuotaService,
     private logger: LoggingRepository,
   ) {
     this.logger.setContext(TelegramSyncService.name);
@@ -85,36 +81,54 @@ export class TelegramSyncService {
 
   /**
    * Restore an asset's original file from Telegram to `targetPath`.
-   * Used as a fallback when the on-disk copy has gone missing.
-   * Returns true when the file was restored.
+   * Downloads every stored part in order and concatenates the decrypted
+   * plaintext. Returns true when the file was restored.
    */
   async restoreTo(assetId: string, targetPath: string): Promise<boolean> {
-    const ref = await this.refRepository.get(assetId);
-    if (!ref) {
+    const summary = await this.refRepository.getSummary(assetId);
+    if (!summary) {
       return false;
     }
 
     const vaultKey = this.configRepository.getEnv().telegram.vaultKey;
-    if (ref.encrypted && !vaultKey) {
+    if (summary.encrypted && !vaultKey) {
       this.logger.error(`Asset ${assetId} is encrypted but TELEGRAM_VAULT_KEY is not set; cannot restore`);
       return false;
     }
 
     await this.mtproto.connect();
 
-    const downloadPath = ref.encrypted ? `${targetPath}.encrypted` : targetPath;
+    const workDir = await mkdtemp(join(tmpdir(), 'tg-restore-'));
     try {
-      await this.mtproto.downloadFile(ref.messageId, downloadPath);
-      if (ref.encrypted) {
-        await this.crypto.decryptFile(downloadPath, targetPath, vaultKey!);
+      for (const part of summary.parts) {
+        const partPath = join(workDir, `part-${part.partIndex}.bin`);
+        await this.mtproto.downloadFile(part.messageId, partPath);
+        if (summary.encrypted) {
+          const outPath = join(workDir, `plain-${part.partIndex}.bin`);
+          await this.crypto.decryptFile(partPath, outPath, vaultKey!);
+          await rm(partPath, { force: true });
+          await this.appendFileTo(targetPath, outPath);
+          await rm(outPath, { force: true });
+        } else {
+          await this.appendFileTo(targetPath, partPath);
+          await rm(partPath, { force: true });
+        }
       }
-      this.logger.log(`Restored asset ${assetId} from telegram message ${ref.messageId}`);
+      this.logger.log(`Restored asset ${assetId} from ${summary.parts.length} telegram part(s)`);
       return true;
+    } catch (error: unknown) {
+      this.logger.error(`Failed to restore asset ${assetId} from telegram: ${error}`);
+      return false;
     } finally {
-      if (ref.encrypted) {
-        await rm(downloadPath, { force: true });
-      }
+      await rm(workDir, { recursive: true, force: true });
     }
+  }
+
+  private async appendFileTo(targetPath: string, sourcePath: string): Promise<void> {
+    const { createReadStream } = await import('node:fs');
+    const { createWriteStream } = await import('node:fs');
+    const { pipeline } = await import('node:stream/promises');
+    await pipeline(createReadStream(sourcePath), createWriteStream(targetPath, { flags: 'a' }));
   }
 
   private async drain(): Promise<void> {
@@ -144,9 +158,8 @@ export class TelegramSyncService {
   private async uploadOne(item: QueueItem): Promise<void> {
     const { assetId, originalPath, checksum } = item;
 
-    const existing = await this.refRepository.get(assetId);
-    if (existing) {
-      this.logger.debug(`Asset ${assetId} already backed up (message ${existing.messageId})`);
+    if (await this.refRepository.has(assetId)) {
+      this.logger.debug(`Asset ${assetId} already backed up`);
       return;
     }
 
@@ -154,49 +167,34 @@ export class TelegramSyncService {
       throw new Error(`Original file missing on disk: ${originalPath}`);
     }
 
-    const { size } = await stat(originalPath);
-    if (!this.quota.canUpload(size)) {
-      this.logger.warn(
-        `Daily telegram quota exhausted; deferring asset ${assetId} (${size} bytes). Remaining: ${this.quota.remainingBytes}`,
-      );
-      this.queue.unshift(item);
-      throw new QuotaDeferredError();
-    }
-
     await this.mtproto.connect();
 
     const vaultKey = this.configRepository.getEnv().telegram.vaultKey;
-    let uploadPath = originalPath;
-    let actualSize = size;
-
-    if (vaultKey) {
-      const encryptedPath = join(tmpdir(), `tg-enc-${assetId}.bin`);
-      try {
-        await this.crypto.encryptFile(originalPath, encryptedPath, vaultKey);
-        actualSize = (await stat(encryptedPath)).size;
-        uploadPath = encryptedPath;
-      } catch (error) {
-        await rm(encryptedPath, { force: true });
-        throw error;
-      }
-    }
+    const maxPartBytes = this.configRepository.getEnv().telegram.maxPartBytes;
+    const workDir = await mkdtemp(join(tmpdir(), 'tg-upload-'));
 
     try {
-      const result = await this.mtproto.uploadFile(uploadPath, `${assetId}.bin`);
-      this.quota.recordUpload(actualSize);
-      await this.refRepository.create({
-        assetId,
-        messageId: result.messageId,
-        chatId: result.chatId,
-        size: actualSize,
-        checksum,
-        encrypted: vaultKey !== null,
-      });
-      this.logger.log(`Backed up asset ${assetId} → telegram message ${result.messageId}`);
-    } finally {
-      if (vaultKey) {
-        await rm(uploadPath, { force: true });
+      const parts = vaultKey
+        ? await this.crypto.encryptFileToParts(originalPath, maxPartBytes, vaultKey, workDir)
+        : [{ index: 0, path: originalPath, size: (await stat(originalPath)).size }];
+
+      const totalParts = parts.length;
+      for (const part of parts) {
+        const result = await this.mtproto.uploadFile(part.path, `${assetId}.part${part.index}.bin`);
+        await this.refRepository.createPart({
+          assetId,
+          partIndex: part.index,
+          totalParts,
+          messageId: result.messageId,
+          chatId: result.chatId,
+          size: part.size,
+          checksum,
+          encrypted: vaultKey !== null,
+        });
       }
+      this.logger.log(`Backed up asset ${assetId} → ${totalParts} telegram message(s)`);
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
     }
   }
 
@@ -204,19 +202,13 @@ export class TelegramSyncService {
     return {
       queueDepth: this.queue.length,
       processing: this.processing,
-      quota: this.quota.status(),
       telegram: this.mtproto.status(),
     };
   }
 }
 
-class QuotaDeferredError extends Error {}
-
 function isHardError(error: unknown): boolean {
-  return (
-    error instanceof QuotaDeferredError === false &&
-    /session missing|cannot upload missing|must be set when telegram storage is enabled/i.test(String(error))
-  );
+  return /session missing|cannot upload missing|must be set when telegram storage is enabled/i.test(String(error));
 }
 
 function toHexString(buffer: Buffer | undefined): string | null {

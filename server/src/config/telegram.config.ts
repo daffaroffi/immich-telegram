@@ -10,14 +10,14 @@ export interface TelegramStorageConfig {
   chatId: bigint;
   sessionPath: string;
   vaultKey: Buffer | null;
-  /** Upload budget per calendar day in megabytes. Telegram default: 2048. */
-  dailyUploadLimitMb: number;
+  /** Max plaintext bytes per uploaded part, before encryption overhead. Default 1.9 GiB. */
+  maxPartBytes: number;
 }
 
 export const DEFAULT_TELEGRAM_CONFIG: Omit<TelegramStorageConfig, 'apiId' | 'apiHash' | 'chatId' | 'vaultKey'> = {
   enabled: false,
   sessionPath: '/config/telegram.session',
-  dailyUploadLimitMb: 2048,
+  maxPartBytes: 1_900_000_000,
 };
 
 export interface TelegramFileInfo {
@@ -25,6 +25,15 @@ export interface TelegramFileInfo {
   chatId: bigint;
   fileSize: number;
 }
+
+/**
+ * Hard Telegram limit for a single file on a free account.
+ * Telegram FAQ: files are limited to 2 GB each (4 GB with Premium).
+ * There is no daily upload limit — the "per file" cap is the only hard bound.
+ * A plaintext part must stay under this after the encryption overhead, hence
+ * the configurable maxPartBytes default of 1.9 GiB.
+ */
+export const TELEGRAM_MAX_FILE_BYTES = 2_000_000_000;
 
 /** Envelope magic/version for our own encryption format (NOT TDENC2-compatible). */
 export const TG_ENC_CONSTANTS = {

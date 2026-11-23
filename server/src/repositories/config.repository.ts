@@ -133,7 +133,7 @@ export interface EnvData {
     chatId: bigint;
     sessionPath: string;
     vaultKey: Buffer | null;
-    dailyUploadLimitMb: number;
+    maxPartBytes: number;
   };
 
   noColor: boolean;
@@ -414,7 +414,7 @@ const getEnv = (): EnvData => {
       chatId: dto.TELEGRAM_CHAT_ID ?? 0n,
       sessionPath: dto.TELEGRAM_SESSION_PATH ?? '/config/telegram.session',
       vaultKey: dto.TELEGRAM_VAULT_KEY ? Buffer.from(dto.TELEGRAM_VAULT_KEY, 'hex') : null,
-      dailyUploadLimitMb: dto.TELEGRAM_DAILY_UPLOAD_LIMIT_MB ?? 2048,
+      maxPartBytes: dto.TELEGRAM_MAX_PART_BYTES ?? 1_900_000_000,
     },
 
     noColor: !!dto.NO_COLOR,

@@ -45,7 +45,9 @@ TELEGRAM_API_HASH=your_api_hash
 TELEGRAM_CHAT_ID=-1001234567890
 # optional
 TELEGRAM_SESSION_PATH=/config/telegram.session
-TELEGRAM_DAILY_UPLOAD_LIMIT_MB=2048   # default; matches Telegram's own daily cap
+# Max plaintext bytes per uploaded part (files above this are split into
+# multiple messages; Telegram's hard limit is 2 GB per FILE, not per day).
+TELEGRAM_MAX_PART_BYTES=1900000000
 ```
 
 Generate the encryption key once:
@@ -81,17 +83,17 @@ New uploads are backed up automatically.
 ## Operations
 
 ```bash
-# status: connection, queue depth, today's quota usage, backed-up count
+# status: connection, queue depth, backed-up assets and part count
 curl -H "x-api-key: $KEY" http://localhost:2283/api/admin/telegram/status
 
-# queue every asset that has no Telegram copy yet (respects the daily budget)
+# queue every asset that has no Telegram copy yet
 curl -X POST -H "x-api-key: $KEY" http://localhost:2283/api/admin/telegram/backfill
 ```
 
-Backfill is deliberately rationed: the daily budget (default 2 GB, matching
-Telegram's own limit) stops the queue and resumes the next day. Files stay
-queued in memory; a restart re-derives them from the database on the next
-`backfill` call.
+Files larger than `TELEGRAM_MAX_PART_BYTES` (default 1.9 GB) are split into
+multiple encrypted parts and uploaded as separate messages, because Telegram's
+2 GB cap is **per file**, not per day. There is no daily upload budget — the
+queue drains as fast as Telegram accepts it, pausing only on `FLOOD_WAIT`.
 
 ## Storage model notes
 
@@ -109,8 +111,9 @@ queued in memory; a restart re-derives them from the database on the next
 ## Limits and caveats
 
 - One account, one channel (no multi-account rotation).
-- Telegram caps uploads per account per day; the quota service enforces the
-  same number so the app degrades predictably instead of being throttled.
+- Telegram's limit is **2 GB per file** (4 GB with Premium) — there is no daily
+  upload cap. Files above `TELEGRAM_MAX_PART_BYTES` are split into multiple
+  encrypted parts and reassembled on restore.
 - `FLOOD_WAIT_x` responses are retried with the server-provided delay (capped at
   15 minutes, 5 attempts) before the item is left queued.
 - The session file is a credential: it grants full account access. Keep it out

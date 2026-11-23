@@ -27,7 +27,8 @@ export class TelegramAdminController {
     return {
       check: 'ok' as const,
       ...this.sync.status(),
-      backedUpCount: await this.refRepository.count(),
+      backedUpAssets: await this.refRepository.countAssets(),
+      backedUpParts: await this.refRepository.count(),
     };
   }
 

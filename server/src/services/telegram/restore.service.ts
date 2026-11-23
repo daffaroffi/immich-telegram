@@ -1,6 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { existsSync } from 'node:fs';
-import { rm } from 'node:fs/promises';
+import { createReadStream, createWriteStream, existsSync } from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { pipeline } from 'node:stream/promises';
 import { ConfigRepository } from 'src/repositories/config.repository.js';
 import { LoggingRepository } from 'src/repositories/logging.repository.js';
 import { TelegramRefRepository } from 'src/repositories/telegram-ref.repository.js';
@@ -11,9 +14,8 @@ import { TelegramMtprotoService } from 'src/services/telegram/mtproto.service.js
  * Restore path for telegram-backed assets.
  *
  * The on-disk copy is still the source of truth; this service only runs when
- * that copy has gone missing (manual deletion, lost volume, disk failure) and a
- * telegram_ref row exists. It downloads the stored envelope, decrypts it and
- * writes the file back to the path Immich expects.
+ * that copy has gone missing and a telegram_ref row exists. It downloads every
+ * stored part in order, decrypts and reassembles the original.
  *
  * Deliberately independent of BaseService so it can be wired into the HTTP
  * layer without extending the already very long base constructor.
@@ -46,34 +48,45 @@ export class TelegramRestoreService {
       return false;
     }
 
-    const ref = await this.refRepository.get(assetId);
-    if (!ref) {
+    const summary = await this.refRepository.getSummary(assetId);
+    if (!summary) {
       return false;
     }
 
     const vaultKey = this.configRepository.getEnv().telegram.vaultKey;
-    if (ref.encrypted && !vaultKey) {
+    if (summary.encrypted && !vaultKey) {
       this.logger.error(`Asset ${assetId} is encrypted but TELEGRAM_VAULT_KEY is not set; cannot restore`);
       return false;
     }
 
     this.logger.warn(`Original file missing on disk, restoring ${assetId} from telegram`);
 
-    const stagingPath = ref.encrypted ? `${path}.tgrestore` : path;
+    const workDir = await mkdtemp(join(tmpdir(), 'tg-restore-'));
     try {
-      await this.mtproto.downloadFile(ref.messageId, stagingPath);
-      if (ref.encrypted) {
-        await this.crypto.decryptFile(stagingPath, path, vaultKey!);
+      for (const part of summary.parts) {
+        const downloaded = join(workDir, `part-${part.partIndex}.bin`);
+        await this.mtproto.downloadFile(part.messageId, downloaded);
+
+        if (summary.encrypted) {
+          const decrypted = join(workDir, `plain-${part.partIndex}.bin`);
+          await this.crypto.decryptFile(downloaded, decrypted, vaultKey!);
+          await rm(downloaded, { force: true });
+          await pipeline(createReadStream(decrypted), createWriteStream(path, { flags: 'a' }));
+          await rm(decrypted, { force: true });
+        } else {
+          await pipeline(createReadStream(downloaded), createWriteStream(path, { flags: 'a' }));
+          await rm(downloaded, { force: true });
+        }
       }
-      this.logger.log(`Restored ${assetId} from telegram message ${ref.messageId}`);
+      this.logger.log(`Restored ${assetId} from ${summary.parts.length} telegram part(s)`);
       return true;
     } catch (error: unknown) {
       this.logger.error(`Failed to restore ${assetId} from telegram: ${error}`);
+      // do not leave a partial file that would later masquerade as a full original
+      await rm(path, { force: true }).catch(() => {});
       return false;
     } finally {
-      if (ref.encrypted) {
-        await rm(stagingPath, { force: true });
-      }
+      await rm(workDir, { recursive: true, force: true });
     }
   }
 }

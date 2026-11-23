@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes, timingSafeEqual } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { stat } from 'node:fs/promises';
-import { pipeline } from 'node:stream/promises';
+import { open, stat } from 'node:fs/promises';
+import { join } from 'node:path';
 import { TG_ENC_CONSTANTS } from 'src/config/telegram.config.js';
 import { LoggingRepository } from 'src/repositories/logging.repository.js';
 
@@ -203,28 +203,166 @@ export class TelegramCryptoService {
     return written;
   }
 
-  /** Decrypt a file on disk to another path. Verifies every chunk before writing. */
-  async decryptFile(sourcePath: string, targetPath: string, vaultKey: Buffer): Promise<number> {
-    const { size } = await stat(sourcePath);
-    if (size > 512 * 1024 * 1024) {
-      throw new Error('Encrypted file too large for in-memory envelope decryption');
+  /**
+   * Encrypt a plaintext byte range [start, start+length) of sourcePath into a
+   * standalone envelope at targetPath. Used to split files larger than the
+   * Telegram per-file limit into independent encrypted parts.
+   */
+  async encryptFilePart(sourcePath: string, targetPath: string, vaultKey: Buffer, start: number, length: number): Promise<number> {
+    const write = createWriteStream(targetPath);
+    let written = 0;
+
+    const read = createReadStream(sourcePath, { start, end: start + length - 1, highWaterMark: TG_ENC_CONSTANTS.CHUNK_SIZE });
+    const salt = randomBytes(32);
+    const ivPrefix = randomBytes(TG_ENC_CONSTANTS.IV_SIZE - 8);
+    const fileKey = this.deriveFileKey(vaultKey, salt);
+
+    const header = Buffer.alloc(TG_ENC_CONSTANTS.MAGIC.length + 1 + 32 + 4 + ivPrefix.length + 8);
+    let offset = 0;
+    header.write(TG_ENC_CONSTANTS.MAGIC, offset, 'ascii');
+    offset += TG_ENC_CONSTANTS.MAGIC.length;
+    header.writeUInt8(TG_ENC_CONSTANTS.VERSION, offset);
+    offset += 1;
+    salt.copy(header, offset);
+    offset += 32;
+    header.writeUInt32LE(TG_ENC_CONSTANTS.CHUNK_SIZE, offset);
+    offset += 4;
+    ivPrefix.copy(header, offset);
+    offset += ivPrefix.length;
+    header.writeBigUInt64LE(BigInt(length), offset);
+
+    write.write(header);
+    written += header.length;
+
+    let index = 0;
+    for await (const chunk of read) {
+      const plain = chunk as Buffer;
+      const cipher = createCipheriv(TG_ENC_CONSTANTS.CIPHER, fileKey, this.chunkIv(ivPrefix, index), {
+        authTagLength: TG_ENC_CONSTANTS.AUTH_TAG_SIZE,
+      });
+      cipher.setAAD(this.chunkAad(salt, index, plain.length));
+      const record = Buffer.concat([cipher.update(plain), cipher.final(), cipher.getAuthTag()]);
+      if (!write.write(record)) {
+        await new Promise<void>((resolve) => write.once('drain', resolve));
+      }
+      written += record.length;
+      index++;
     }
-    const envelope = await new Promise<Buffer>((resolve, reject) => {
-      const chunks: Buffer[] = [];
-      createReadStream(sourcePath)
-        .on('data', (chunk) => chunks.push(chunk as Buffer))
-        .on('error', reject)
-        .on('end', () => resolve(Buffer.concat(chunks)));
+
+    await new Promise<void>((resolve, reject) => {
+      write.end((error?: Error | null) => (error ? reject(error) : resolve()));
     });
-    const plaintext = this.decryptBuffer(envelope, vaultKey);
-    await pipeline(async function* () {
-      yield plaintext;
-    }, createWriteStream(targetPath));
-    return plaintext.length;
+
+    return written;
+  }
+
+  /**
+   * Encrypt a file into at most ceil(size / partSize) independent parts under
+   * outDir. Returns each part's index, path and encrypted size. Files fitting
+   * a single part still use the ordinary encryptFile path via partSize >= size.
+   */
+  async encryptFileToParts(sourcePath: string, partSize: number, vaultKey: Buffer, outDir: string): Promise<{ index: number; path: string; size: number }[]> {
+    const { size } = await stat(sourcePath);
+    const partCount = Math.max(1, Math.ceil(size / partSize));
+    const parts: { index: number; path: string; size: number }[] = [];
+    for (let i = 0; i < partCount; i++) {
+      const start = i * partSize;
+      const length = Math.min(partSize, size - start);
+      const targetPath = join(outDir, `part-${i}.tg`);
+      const encrypted = await this.encryptFilePart(sourcePath, targetPath, vaultKey, start, length);
+      parts.push({ index: i, path: targetPath, size: encrypted });
+    }
+    return parts;
+  }
+
+  /** Decrypt a file on disk to another path. Streams chunk by chunk, so it works for very large parts. */
+  async decryptFile(sourcePath: string, targetPath: string, vaultKey: Buffer): Promise<number> {
+    const header = await this.readHeader(sourcePath);
+    const fileKey = this.deriveFileKey(vaultKey, header.salt);
+    const read = createReadStream(sourcePath, { start: header.headerLength, highWaterMark: header.chunkSize + TG_ENC_CONSTANTS.AUTH_TAG_SIZE });
+    const write = createWriteStream(targetPath);
+    let written = 0;
+    let index = 0;
+    let pending: Buffer = Buffer.alloc(0);
+
+    for await (const raw of read) {
+      pending = Buffer.concat([pending, raw as Buffer]);
+      while (pending.length > 0) {
+        const thisPlainLength = Math.min(header.chunkSize, header.plaintextLength - index * header.chunkSize);
+        const recordLength = thisPlainLength + TG_ENC_CONSTANTS.AUTH_TAG_SIZE;
+        if (pending.length < recordLength) {
+          break;
+        }
+        const record = pending.subarray(0, recordLength);
+        pending = pending.subarray(recordLength);
+
+        const tag = record.subarray(record.length - TG_ENC_CONSTANTS.AUTH_TAG_SIZE);
+        const body = record.subarray(0, record.length - TG_ENC_CONSTANTS.AUTH_TAG_SIZE);
+        const decipher = createDecipheriv(TG_ENC_CONSTANTS.CIPHER, fileKey, this.chunkIv(header.ivPrefix, index), {
+          authTagLength: TG_ENC_CONSTANTS.AUTH_TAG_SIZE,
+        });
+        decipher.setAAD(this.chunkAad(header.salt, index, thisPlainLength));
+        decipher.setAuthTag(tag);
+        const plain = Buffer.concat([decipher.update(body), decipher.final()]);
+
+        if (!write.write(plain)) {
+          await new Promise<void>((resolve) => write.once('drain', resolve));
+        }
+        written += plain.length;
+        index++;
+      }
+    }
+
+    if (index * header.chunkSize < header.plaintextLength || pending.length > 0) {
+      await new Promise<void>((resolve, reject) => {
+        write.destroy();
+        write.on('close', () => reject(new Error('Telegram envelope is truncated')));
+      });
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      write.end((error?: Error | null) => (error ? reject(error) : resolve()));
+    });
+
+    if (written !== header.plaintextLength) {
+      throw new Error('Telegram envelope length mismatch');
+    }
+    return written;
   }
 
   /** Constant-time compare used by integrity checks. */
   equals(a: Buffer, b: Buffer): boolean {
     return a.length === b.length && timingSafeEqual(a, b);
+  }
+
+  /** Parse the fixed envelope header without loading the payload. */
+  private async readHeader(sourcePath: string) {
+    const { MAGIC, VERSION, IV_SIZE } = TG_ENC_CONSTANTS;
+    const headerLength = MAGIC.length + 1 + 32 + 4 + (IV_SIZE - 8) + 8;
+    const fd = await open(sourcePath, 'r');
+    try {
+      const buf = Buffer.alloc(headerLength);
+      const { bytesRead } = await fd.read(buf, 0, headerLength, 0);
+      if (bytesRead < headerLength) {
+        throw new Error('Telegram envelope is truncated');
+      }
+      if (buf.subarray(0, MAGIC.length).toString('ascii') !== MAGIC) {
+        throw new Error('Telegram envelope has an invalid magic');
+      }
+      if (buf.readUInt8(MAGIC.length) !== VERSION) {
+        throw new Error('Unsupported telegram envelope version');
+      }
+      let offset = MAGIC.length + 1;
+      const salt = Buffer.from(buf.subarray(offset, offset + 32));
+      offset += 32;
+      const chunkSize = buf.readUInt32LE(offset);
+      offset += 4;
+      const ivPrefix = Buffer.from(buf.subarray(offset, offset + IV_SIZE - 8));
+      offset = headerLength - 8;
+      const plaintextLength = Number(buf.readBigUInt64LE(offset));
+      return { headerLength, salt, chunkSize, ivPrefix, plaintextLength };
+    } finally {
+      await fd.close();
+    }
   }
 }

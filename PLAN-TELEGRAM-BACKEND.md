@@ -1,6 +1,13 @@
 # Plan — Immich 3.4 + Telegram Storage (Jalur B)
 
-Tanggal: 2026-11-22 · Status: PLAN (belum eksekusi)
+Tanggal: 2026-11-22 · Status: Sprint 1–4 selesai & ter-push; koreksi quota harian diterapkan 2026-11-23.
+
+> **KOREKSI (2026-11-23):** Telegram TIDAK punya limit harian. Batas resmi adalah
+> **2 GB per FILE** (4 GB Premium, kita target akun gratis). Keputusan #5 di bawah
+> diganti: hapus `quota.service.ts` (daily budget), ganti dengan pemecahan file
+> menjadi part independen ≤ `TELEGRAM_MAX_PART_BYTES` (default 1.9 GB). `telegram_ref`
+> jadi 1 baris per part (composite key `assetId`+`partIndex`), restore menggabung
+> part sesuai urutan.
 
 ## Keputusan final (Dapa)
 
@@ -8,7 +15,7 @@ Tanggal: 2026-11-22 · Status: PLAN (belum eksekusi)
 2. **UI & apps**: 100% Immich bawaan (web/mobile/desktop). Tidak ada perubahan di web/, mobile/, e2e/.
 3. **Original tetap di disk VPS** — Telegram = lapisan cadangan tak terbatas + restore otomatis kalau disk hilang.
 4. **Enkripsi sendiri** (bukan TDENC2, tidak perlu kompatibel Telegram-Drive).
-5. **Tanpa multi-akun**. Rate-limit mengikuti Telegram: default `TELEGRAM_DAILY_UPLOAD_LIMIT_MB = 2048` (2 GB/hari), upload berhenti & lanjut besok.
+5. **Tanpa multi-akun**. Tanpa limit harian — Taiwan; batas Telegram 2 GB/FILE, jadi file besar dipecah jadi part (lihat koreksi di atas).
 6. **Deploy**: nanti, bukan VPS ini (12 GB sudah terisi tumpukan lain).
 
 ## Arsitektur

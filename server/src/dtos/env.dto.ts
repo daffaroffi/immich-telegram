@@ -92,6 +92,6 @@ export const EnvSchema = z
     TELEGRAM_CHAT_ID: z.coerce.bigint().optional(),
     TELEGRAM_SESSION_PATH: z.string().optional(),
     TELEGRAM_VAULT_KEY: z.string().optional(),
-    TELEGRAM_DAILY_UPLOAD_LIMIT_MB: z.coerce.number().int().optional(),
+    TELEGRAM_MAX_PART_BYTES: z.coerce.number().int().positive().optional(),
   })
   .meta({ id: 'EnvDto' });

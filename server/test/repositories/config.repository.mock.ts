@@ -110,7 +110,7 @@ export const envData: EnvData = {
     chatId: 0n,
     sessionPath: '/config/telegram.session',
     vaultKey: null,
-    dailyUploadLimitMb: 2048,
+    maxPartBytes: 1_900_000_000,
   },
 
   noColor: false,

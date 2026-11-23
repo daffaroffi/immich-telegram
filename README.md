@@ -30,7 +30,7 @@ mobile apps. This fork adds one thing — a **Telegram storage backend**:
 | **Encrypted at rest** | AES-256-GCM per 1 MiB chunk, per-file key derived with HKDF-SHA256 |
 | **Zero UI changes** | The stock Immich clients work unreleased; backup/restore stays server-side |
 | **Automatic restore** | If an original disappears from disk, the next download pulls it back from Telegram |
-| **Predictable throttling** | Follows Telegram's own ~2 GB/day upload limit instead of being rate limited |
+| **No artificial quota** | Telegram's only cap is 2 GB per file — no daily limit; larger files are split into parts |
 | **Self-contained** | One private channel, no third-party service, no sync client to install |
 
 Read the design and the reasoning in [`PLAN-TELEGRAM-BACKEND.md`](./PLAN-TELEGRAM-BACKEND.md).
@@ -83,15 +83,16 @@ caveats: [`TELEGRAM_STORAGE.md`](./TELEGRAM_STORAGE.md).
 ### Existing libraries
 
 ```bash
-# queue every asset that has no Telegram copy yet (respects the daily budget)
+# queue every asset that has no Telegram copy yet
 curl -X POST -H "x-api-key: $KEY" http://localhost:2283/api/admin/telegram/backfill
 
-# connection, queue depth, today's quota, backed-up count
+# connection, queue depth, backed-up assets and part count
 curl -H "x-api-key: $KEY" http://localhost:2283/api/admin/telegram/status
 ```
 
-A large first backfill takes days at 2 GB/day by design — that is Telegram's
-limit, and the queue resumes where it stopped.
+Files above `TELEGRAM_MAX_PART_BYTES` (default 1.9 GB) are split into multiple
+encrypted parts and reassembled on restore — Telegram's 2 GB cap is per file,
+not per day, so there is no daily budget to ration against.
 
 ## ⚠️ Before you rely on this
 
@@ -111,7 +112,7 @@ limit, and the queue resumes where it stopped.
 |---|---|
 | Crypto (envelope, tamper detection) | Implemented, unit tested |
 | MTProto upload/download + FLOOD_WAIT backoff | Implemented |
-| Daily quota, sync queue, admin endpoints | Implemented |
+| Daily quota, sync queue, admin endpoints | Replaced by per-file part splitting; sync queue + admin endpoints implemented |
 | Restore fallback on download | Implemented |
 | Live end-to-end run against a real Telegram account | Pending |
 
