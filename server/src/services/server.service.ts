@@ -48,7 +48,7 @@ export class ServerService extends BaseService {
 
     return {
       version,
-      versionUrl: `https://github.com/immich-app/immich/releases/tag/${version}`,
+      versionUrl: `https://github.com/daffaroffi/immich-telegram/releases/tag/${version}`,
       licensed: !!licensed,
       ...buildMetadata,
       ...buildVersions,
@@ -56,7 +56,7 @@ export class ServerService extends BaseService {
   }
 
   getApkLinks(): ServerApkLinksDto {
-    const baseUrl = `https://github.com/immich-app/immich/releases/download/v${serverVersion.toString()}`;
+    const baseUrl = `https://github.com/daffaroffi/immich-telegram/releases/download/v${serverVersion.toString()}`;
     return {
       arm64v8a: `${baseUrl}/app-arm64-v8a-release.apk`,
       armeabiv7a: `${baseUrl}/app-armeabi-v7a-release.apk`,

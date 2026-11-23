@@ -18,9 +18,14 @@
 <Modal title={$t('about')} {onClose}>
   <ModalBody>
     <div class="flex flex-col gap-4 sm:grid sm:grid-cols-2">
-      {#if info.sourceRef === 'main' && info.repository === 'immich-app/immich'}
+      {#if info.sourceRef === 'main' && info.repository === 'daffaroffi/immich-telegram'}
         <Alert color="warning" title={$t('main_branch_warning')} class="col-span-full" size="small" />
       {/if}
+
+      <Alert color="primary" title="Telegram-backed storage" class="col-span-full" size="small">
+        Photo originals are encrypted and backed up to a private Telegram channel.
+        See the repository README for setup and risks.
+      </Alert>
 
       <ServerAboutItem id="immich" title="Immich" version={info.version} versionHref={info.versionUrl} />
       <ServerAboutItem id="exif" title="ExifTool" version={info.exiftool} />

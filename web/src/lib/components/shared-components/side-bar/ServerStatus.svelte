@@ -20,7 +20,7 @@
 
   const info = $derived(queries.about.data);
   const versions = $derived(queries.history.data ?? []);
-  let isMain = $derived(info?.sourceRef === 'main' && info.repository === 'immich-app/immich');
+  let isMain = $derived(info?.sourceRef === 'main' && info.repository === 'daffaroffi/immich-telegram');
   let version = $derived($serverVersion ? semverToName($serverVersion) : null);
 
   const getReleaseInfo = (release?: ReleaseEventV1) => {
