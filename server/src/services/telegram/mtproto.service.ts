@@ -2,8 +2,8 @@ import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigRepository } from 'src/repositories/config.repository.js';
 import { LoggingRepository } from 'src/repositories/logging.repository.js';
 import type { TelegramStorageConfig } from 'src/config/telegram.config.js';
-import { createReadStream, existsSync } from 'node:fs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -181,8 +181,13 @@ export class TelegramMtprotoService implements OnModuleInit, OnModuleDestroy {
     const gramjs = await this.loadGramjs();
 
     return this.withFloodWait('upload', async () => {
+      const { size } = await stat(filePath);
+      // gramjs expects a CustomFile (name/size/path) — a bare ReadStream is
+      // rejected by fileToBuffer with "Could not create buffer from file".
+      const file = new gramjs.CustomFile(fileName, size, filePath);
+
       const uploaded = await client.uploadFile({
-        file: createReadStream(filePath),
+        file,
         workers: 1,
       });
 
