@@ -184,7 +184,9 @@ export class TelegramMtprotoService implements OnModuleInit, OnModuleDestroy {
       const { size } = await stat(filePath);
       // gramjs expects a CustomFile (name/size/path) — a bare ReadStream is
       // rejected by fileToBuffer with "Could not create buffer from file".
-      const file = new gramjs.CustomFile(fileName, size, filePath);
+      // CustomFile lives in telegram/client/uploads, not on the root export.
+      const uploads = await import('telegram/client/uploads.js');
+      const file = new uploads.CustomFile(fileName, size, filePath);
 
       const uploaded = await client.uploadFile({
         file,
