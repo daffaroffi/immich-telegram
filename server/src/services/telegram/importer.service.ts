@@ -160,14 +160,16 @@ export class TelegramImporterService {
 
     const assetId = randomUUID();
     const safeName = file.fileName.replace(/[^\w.\-]+/g, '_');
-    const dot = safeName.lastIndexOf('.');
-    const extension = dot > 0 ? safeName.slice(dot) : '.bin';
+    const bytes = await readFile(plainPath);
+    // Telegram-drive style uploads keep an opaque name (uuid.part0.bin), so the
+    // real format has to come from the content, not the extension.
+    const extension = sniffExtension(bytes) ?? extensionOf(safeName);
+    const displayName = rewriteExtension(safeName, extension);
     const folder = StorageCore.getNestedFolder('upload' as never, ownerId, assetId);
     await mkdir(folder, { recursive: true });
     const targetPath = join(folder, assetId + extension);
     await copyFile(plainPath, targetPath);
 
-    const bytes = await readFile(targetPath);
     const checksum = createHash('sha1').update(bytes).digest();
     const fileDate = file.date;
 
@@ -175,14 +177,14 @@ export class TelegramImporterService {
       id: assetId,
       ownerId,
       libraryId: null,
-      type: mimeTypes.assetType(safeName),
+      type: mimeTypes.assetType(displayName),
       checksum,
       checksumAlgorithm: ChecksumAlgorithm.sha1File,
       originalPath: targetPath,
       fileCreatedAt: fileDate,
       fileModifiedAt: fileDate,
       localDateTime: fileDate,
-      originalFileName: safeName,
+      originalFileName: displayName,
       isFavorite: false,
       isOffline: false,
       isExternal: false,
@@ -211,6 +213,43 @@ export class TelegramImporterService {
       encrypted,
     });
 
-    this.logger.log(`Imported telegram message ${file.messageId} (${safeName}, ${size}B) as asset ${assetId}`);
+    this.logger.log(`Imported telegram message ${file.messageId} (${displayName}, ${size}B) as asset ${assetId}`);
   }
+}
+
+const MAGIC_EXTENSIONS: { magic: Buffer; extension: string }[] = [
+  { magic: Buffer.from([0x89, 0x50, 0x4e, 0x47]), extension: '.png' }, // PNG
+  { magic: Buffer.from([0xff, 0xd8, 0xff]), extension: '.jpg' }, // JPEG
+  { magic: Buffer.from('GIF8', 'ascii'), extension: '.gif' },
+  { magic: Buffer.from('BM', 'ascii'), extension: '.bmp' },
+  { magic: Buffer.from('RIFF', 'ascii'), extension: '.webp' }, // RIFF....WEBP
+  { magic: Buffer.from('ftyp', 'ascii'), extension: '.mp4' }, // ISO-BMFF (mp4/mov)
+  { magic: Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), extension: '.webm' }, // Matroska
+  { magic: Buffer.from('%PDF', 'ascii'), extension: '.pdf' },
+  { magic: Buffer.from('PK', 'ascii'), extension: '.zip' },
+  { magic: Buffer.from([0x1f, 0x8b]), extension: '.gz' },
+];
+
+function extensionOf(name: string): string {
+  const dot = name.lastIndexOf('.');
+  return dot > 0 ? name.slice(dot) : '.bin';
+}
+
+function rewriteExtension(name: string, extension: string): string {
+  const dot = name.lastIndexOf('.');
+  const base = dot > 0 ? name.slice(0, dot) : name;
+  return `${base}${extension}`;
+}
+
+/** Guess the real file format from magic bytes; used for opaque telegram names. */
+function sniffExtension(bytes: Buffer): string | null {
+  for (const { magic, extension } of MAGIC_EXTENSIONS) {
+    if (bytes.length >= magic.length && bytes.subarray(0, magic.length).equals(magic)) {
+      if (extension === '.webp' && bytes.subarray(8, 12).toString('ascii') !== 'WEBP') {
+        continue;
+      }
+      return extension;
+    }
+  }
+  return null;
 }
