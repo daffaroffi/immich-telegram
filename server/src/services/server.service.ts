@@ -1,6 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { serverVersion } from 'src/constants.js';
-import { StorageCore } from 'src/cores/storage.core.js';
 import { OnEvent } from 'src/decorators.js';
 import { LicenseKeyDto, LicenseResponseDto } from 'src/dtos/license.dto.js';
 import {
@@ -14,7 +13,7 @@ import {
   ServerStorageResponseDto,
   UsageByUserDto,
 } from 'src/dtos/server.dto.js';
-import { StorageFolder, SystemMetadataKey } from 'src/enum.js';
+import { SystemMetadataKey } from 'src/enum.js';
 import { UserStatsQueryResponse } from 'src/repositories/user.repository.js';
 import { Resource } from 'src/resource-paths.js';
 import { BaseService } from 'src/services/base.service.js';
@@ -66,18 +65,24 @@ export class ServerService extends BaseService {
   }
 
   async getStorage(): Promise<ServerStorageResponseDto> {
-    const libraryBase = StorageCore.getBaseFolder(StorageFolder.Library);
-    const diskInfo = await this.storageRepository.checkDiskUsage(libraryBase);
-
-    const usagePercentage = (((diskInfo.total - diskInfo.free) / diskInfo.total) * 100).toFixed(2);
+    // This fork stores media in Telegram, not on the VPS disk. Report the
+    // Telegram-side numbers so the sidebar meter reflects the cloud storage:
+    //   used  = bytes already mapped into the gallery (telegram_ref)
+    //   free  = bytes still sitting in Telegram that are not mapped yet
+    //           (cached by the importer cron; 0 until the first import runs)
+    const usedRaw = await this.telegramRefRepository.totalBytes();
+    const state = await this.systemMetadataRepository.get(SystemMetadataKey.TelegramStorage);
+    const pendingRaw = Math.max(0, Number(state?.pendingBytes ?? 0));
+    const totalRaw = usedRaw + pendingRaw;
+    const usagePercentage = totalRaw > 0 ? ((usedRaw / totalRaw) * 100).toFixed(2) : '0.00';
 
     const serverInfo = new ServerStorageResponseDto();
-    serverInfo.diskAvailable = asHumanReadable(diskInfo.available);
-    serverInfo.diskSize = asHumanReadable(diskInfo.total);
-    serverInfo.diskUse = asHumanReadable(diskInfo.total - diskInfo.free);
-    serverInfo.diskAvailableRaw = diskInfo.available;
-    serverInfo.diskSizeRaw = diskInfo.total;
-    serverInfo.diskUseRaw = diskInfo.total - diskInfo.free;
+    serverInfo.diskAvailable = asHumanReadable(pendingRaw);
+    serverInfo.diskSize = asHumanReadable(totalRaw);
+    serverInfo.diskUse = asHumanReadable(usedRaw);
+    serverInfo.diskAvailableRaw = pendingRaw;
+    serverInfo.diskSizeRaw = totalRaw;
+    serverInfo.diskUseRaw = usedRaw;
     serverInfo.diskUsagePercentage = Number(usagePercentage);
     return serverInfo;
   }

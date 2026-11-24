@@ -56,6 +56,7 @@ import { StorageRepository } from 'src/repositories/storage.repository.js';
 import { SyncCheckpointRepository } from 'src/repositories/sync-checkpoint.repository.js';
 import { SyncRepository } from 'src/repositories/sync.repository.js';
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository.js';
+import { TelegramRefRepository } from 'src/repositories/telegram-ref.repository.js';
 import { TagRepository } from 'src/repositories/tag.repository.js';
 import { TelemetryRepository } from 'src/repositories/telemetry.repository.js';
 import { TrashRepository } from 'src/repositories/trash.repository.js';
@@ -130,6 +131,7 @@ export const BASE_SERVICE_DEPENDENCIES = [
   SyncRepository,
   SyncCheckpointRepository,
   SystemMetadataRepository,
+  TelegramRefRepository,
   TagRepository,
   TelemetryRepository,
   TrashRepository,
@@ -197,6 +199,7 @@ export class BaseService {
     protected syncRepository: SyncRepository,
     protected syncCheckpointRepository: SyncCheckpointRepository,
     protected systemMetadataRepository: SystemMetadataRepository,
+    protected telegramRefRepository: TelegramRefRepository,
     protected tagRepository: TagRepository,
     protected telemetryRepository: TelemetryRepository,
     protected trashRepository: TrashRepository,
@@ -273,6 +276,7 @@ export class BaseService {
       ctx.syncRepository,
       ctx.syncCheckpointRepository,
       ctx.systemMetadataRepository,
+      ctx.telegramRefRepository,
       ctx.tagRepository,
       ctx.telemetryRepository,
       ctx.trashRepository,

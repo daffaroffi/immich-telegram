@@ -69,6 +69,7 @@ import { StorageRepository } from 'src/repositories/storage.repository.js';
 import { SyncCheckpointRepository } from 'src/repositories/sync-checkpoint.repository.js';
 import { SyncRepository } from 'src/repositories/sync.repository.js';
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository.js';
+import { TelegramRefRepository } from 'src/repositories/telegram-ref.repository.js';
 import { TagRepository } from 'src/repositories/tag.repository.js';
 import { TelemetryRepository } from 'src/repositories/telemetry.repository.js';
 import { TrashRepository } from 'src/repositories/trash.repository.js';
@@ -94,6 +95,7 @@ import { newMediaRepositoryMock } from 'test/repositories/media.repository.mock.
 import { newMetadataRepositoryMock } from 'test/repositories/metadata.repository.mock.js';
 import { newStorageRepositoryMock } from 'test/repositories/storage.repository.mock.js';
 import { newSystemMetadataRepositoryMock } from 'test/repositories/system-metadata.repository.mock.js';
+import { newTelegramRefRepositoryMock } from 'test/repositories/telegram-ref.repository.mock.js';
 import { ITelemetryRepositoryMock, newTelemetryRepositoryMock } from 'test/repositories/telemetry.repository.mock.js';
 
 export type ControllerContext = {
@@ -292,6 +294,7 @@ export type ServiceOverrides = {
   sync: SyncRepository;
   syncCheckpoint: SyncCheckpointRepository;
   systemMetadata: SystemMetadataRepository;
+  telegramRef: TelegramRefRepository;
   tag: TagRepository;
   telemetry: TelemetryRepository;
   trash: TrashRepository;
@@ -384,6 +387,7 @@ export const getMocks = () => {
     sync: automock(SyncRepository),
     syncCheckpoint: automock(SyncCheckpointRepository),
     systemMetadata: newSystemMetadataRepositoryMock(),
+    telegramRef: newTelegramRefRepositoryMock(),
     // systemMetadata: automock(SystemMetadataRepository, { strict: false }),
     // eslint-disable-next-line no-sparse-arrays
     tag: automock(TagRepository, { args: [, loggerMock], strict: false }),
@@ -473,6 +477,7 @@ export const newTestService = <T extends BaseService>(
     overrides.sync || (mocks.sync as As<SyncRepository>),
     overrides.syncCheckpoint || (mocks.syncCheckpoint as As<SyncCheckpointRepository>),
     overrides.systemMetadata || (mocks.systemMetadata as As<SystemMetadataRepository>),
+    overrides.telegramRef || (mocks.telegramRef as As<TelegramRefRepository>),
     overrides.tag || (mocks.tag as As<TagRepository>),
     overrides.telemetry || (mocks.telemetry as unknown as TelemetryRepository),
     overrides.trash || (mocks.trash as As<TrashRepository>),

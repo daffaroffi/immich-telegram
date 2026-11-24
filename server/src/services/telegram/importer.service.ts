@@ -4,12 +4,13 @@ import { copyFile, mkdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { AssetType, ChecksumAlgorithm, JobName } from 'src/enum.js';
+import { AssetType, ChecksumAlgorithm, JobName, SystemMetadataKey } from 'src/enum.js';
 import { TelegramRefRepository } from 'src/repositories/telegram-ref.repository.js';
 import { AssetRepository } from 'src/repositories/asset.repository.js';
 import { ConfigRepository } from 'src/repositories/config.repository.js';
 import { JobRepository } from 'src/repositories/job.repository.js';
 import { LoggingRepository } from 'src/repositories/logging.repository.js';
+import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository.js';
 import { TelegramCryptoService } from 'src/services/telegram/crypto.service.js';
 import { TelegramMtprotoService } from 'src/services/telegram/mtproto.service.js';
 
@@ -44,6 +45,7 @@ export class TelegramImporterService {
     private refRepository: TelegramRefRepository,
     private assetRepository: AssetRepository,
     private jobRepository: JobRepository,
+    private systemMetadataRepository: SystemMetadataRepository,
     private crypto: TelegramCryptoService,
     private mtproto: TelegramMtprotoService,
     private logger: LoggingRepository,
@@ -112,7 +114,48 @@ export class TelegramImporterService {
     this.logger.log(
       `Telegram import (${source}) finished: ${result.imported} imported, ${result.skipped} skipped, ${result.failed} failed`,
     );
+    await this.updateStorageCache();
     return result;
+  }
+
+  /**
+   * Cache how many bytes/files are still sitting in Telegram but not mapped
+   * into the gallery yet, so the storage sidebar can report Telegram usage
+   * without hammering the Telegram API on every request.
+   */
+  async updateStorageCache(): Promise<void> {
+    try {
+      const sources = await Promise.all([this.listChatDocuments(2000, true), this.listChatDocuments(2000, false)]);
+      const mapped = new Set<string>();
+      const rows = await this.refRepository.list(10000);
+      for (const row of rows) {
+        mapped.add(`${row.chatId}:${row.messageId}`);
+      }
+      let pendingBytes = 0;
+      let pendingCount = 0;
+      for (const files of sources) {
+        for (const file of files) {
+          if (this.isImmichTestArtifact(file.fileName)) {
+            continue;
+          }
+          // chatId for storage-chat imports is the configured chat id; Saved Messages uses sentinel 0.
+          const chatKey = files === sources[0] ? '0' : String(this.configRepository.getEnv().telegram.chatId);
+          if (mapped.has(`${chatKey}:${file.messageId}`)) {
+            continue;
+          }
+          pendingBytes += file.size;
+          pendingCount++;
+        }
+      }
+      await this.systemMetadataRepository.set(SystemMetadataKey.TelegramStorage, {
+        pendingBytes,
+        pendingCount,
+        updatedAt: new Date().toISOString(),
+      });
+      this.logger.log(`Telegram storage cache updated: ${pendingCount} pending files, ${pendingBytes} bytes`);
+    } catch (error: unknown) {
+      this.logger.warn(`Failed to update telegram storage cache: ${error instanceof Error ? error.message : error}`);
+    }
   }
 
   /** Documents in the storage chat (source='chat') or Saved Messages (source='self'), oldest first. */

@@ -546,6 +546,13 @@ export type MemoriesState = {
   lastOnThisDayDate: string;
 };
 export type MediaLocation = { location: string };
+export type TelegramStorageState = {
+  /** bytes across files still in Telegram that are not mapped into the gallery yet */
+  pendingBytes: number;
+  /** how many telegram files are not mapped yet */
+  pendingCount: number;
+  updatedAt: string;
+};
 
 export interface SystemMetadata extends Record<SystemMetadataKey, Record<string, any>> {
   [SystemMetadataKey.AdminOnboarding]: { isOnboarded: boolean };
@@ -559,6 +566,7 @@ export interface SystemMetadata extends Record<SystemMetadataKey, Record<string,
   [SystemMetadataKey.VersionCheckState]: VersionCheckMetadata;
   [SystemMetadataKey.MemoriesState]: MemoriesState;
   [SystemMetadataKey.IntegrityChecksumCheckpoint]: { date?: string };
+  [SystemMetadataKey.TelegramStorage]: TelegramStorageState;
 }
 
 export type UserPreferences = {

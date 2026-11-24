@@ -18,112 +18,55 @@ describe(ServerService.name, () => {
   });
 
   describe('getStorage', () => {
-    it('should return the disk space as B', async () => {
-      mocks.storage.checkDiskUsage.mockResolvedValue({ free: 200, available: 300, total: 500 });
+    it('should report telegram storage when no cache is set yet', async () => {
+      mocks.telegramRef.totalBytes.mockResolvedValue(1_000_000);
 
       await expect(sut.getStorage()).resolves.toEqual({
-        diskAvailable: '300 B',
-        diskAvailableRaw: 300,
+        diskAvailable: '0 B',
+        diskAvailableRaw: 0,
+        diskSize: '976.6 KiB',
+        diskSizeRaw: 1_000_000,
+        diskUsagePercentage: 100,
+        diskUse: '976.6 KiB',
+        diskUseRaw: 1_000_000,
+      });
+
+      expect(mocks.telegramRef.totalBytes).toHaveBeenCalled();
+      expect(mocks.systemMetadata.get).toHaveBeenCalledWith(SystemMetadataKey.TelegramStorage);
+    });
+
+    it('should add the cached pending bytes to the total', async () => {
+      mocks.telegramRef.totalBytes.mockResolvedValue(1_000_000);
+      mocks.systemMetadata.get.mockResolvedValue({
+        pendingBytes: 2_000_000,
+        pendingCount: 10,
+        updatedAt: '2026-11-24T12:00:00.000Z',
+      });
+
+      await expect(sut.getStorage()).resolves.toEqual({
+        diskAvailable: '1.9 MiB',
+        diskAvailableRaw: 2_000_000,
+        diskSize: '2.9 MiB',
+        diskSizeRaw: 3_000_000,
+        diskUsagePercentage: 33.33,
+        diskUse: '976.6 KiB',
+        diskUseRaw: 1_000_000,
+      });
+    });
+
+    it('should treat a stale negative cache as zero', async () => {
+      mocks.telegramRef.totalBytes.mockResolvedValue(500);
+      mocks.systemMetadata.get.mockResolvedValue({ pendingBytes: -1, pendingCount: 0, updatedAt: 'x' });
+
+      await expect(sut.getStorage()).resolves.toEqual({
+        diskAvailable: '0 B',
+        diskAvailableRaw: 0,
         diskSize: '500 B',
         diskSizeRaw: 500,
-        diskUsagePercentage: 60,
-        diskUse: '300 B',
-        diskUseRaw: 300,
+        diskUsagePercentage: 100,
+        diskUse: '500 B',
+        diskUseRaw: 500,
       });
-
-      expect(mocks.storage.checkDiskUsage).toHaveBeenCalledWith(expect.stringContaining('/data/library'));
-    });
-
-    it('should return the disk space as KiB', async () => {
-      mocks.storage.checkDiskUsage.mockResolvedValue({ free: 200_000, available: 300_000, total: 500_000 });
-
-      await expect(sut.getStorage()).resolves.toEqual({
-        diskAvailable: '293.0 KiB',
-        diskAvailableRaw: 300_000,
-        diskSize: '488.3 KiB',
-        diskSizeRaw: 500_000,
-        diskUsagePercentage: 60,
-        diskUse: '293.0 KiB',
-        diskUseRaw: 300_000,
-      });
-
-      expect(mocks.storage.checkDiskUsage).toHaveBeenCalledWith(expect.stringContaining('/data/library'));
-    });
-
-    it('should return the disk space as MiB', async () => {
-      mocks.storage.checkDiskUsage.mockResolvedValue({ free: 200_000_000, available: 300_000_000, total: 500_000_000 });
-
-      await expect(sut.getStorage()).resolves.toEqual({
-        diskAvailable: '286.1 MiB',
-        diskAvailableRaw: 300_000_000,
-        diskSize: '476.8 MiB',
-        diskSizeRaw: 500_000_000,
-        diskUsagePercentage: 60,
-        diskUse: '286.1 MiB',
-        diskUseRaw: 300_000_000,
-      });
-
-      expect(mocks.storage.checkDiskUsage).toHaveBeenCalledWith(expect.stringContaining('/data/library'));
-    });
-
-    it('should return the disk space as GiB', async () => {
-      mocks.storage.checkDiskUsage.mockResolvedValue({
-        free: 200_000_000_000,
-        available: 300_000_000_000,
-        total: 500_000_000_000,
-      });
-
-      await expect(sut.getStorage()).resolves.toEqual({
-        diskAvailable: '279.4 GiB',
-        diskAvailableRaw: 300_000_000_000,
-        diskSize: '465.7 GiB',
-        diskSizeRaw: 500_000_000_000,
-        diskUsagePercentage: 60,
-        diskUse: '279.4 GiB',
-        diskUseRaw: 300_000_000_000,
-      });
-
-      expect(mocks.storage.checkDiskUsage).toHaveBeenCalledWith(expect.stringContaining('/data/library'));
-    });
-
-    it('should return the disk space as TiB', async () => {
-      mocks.storage.checkDiskUsage.mockResolvedValue({
-        free: 200_000_000_000_000,
-        available: 300_000_000_000_000,
-        total: 500_000_000_000_000,
-      });
-
-      await expect(sut.getStorage()).resolves.toEqual({
-        diskAvailable: '272.8 TiB',
-        diskAvailableRaw: 300_000_000_000_000,
-        diskSize: '454.7 TiB',
-        diskSizeRaw: 500_000_000_000_000,
-        diskUsagePercentage: 60,
-        diskUse: '272.8 TiB',
-        diskUseRaw: 300_000_000_000_000,
-      });
-
-      expect(mocks.storage.checkDiskUsage).toHaveBeenCalledWith(expect.stringContaining('/data/library'));
-    });
-
-    it('should return the disk space as PiB', async () => {
-      mocks.storage.checkDiskUsage.mockResolvedValue({
-        free: 200_000_000_000_000_000,
-        available: 300_000_000_000_000_000,
-        total: 500_000_000_000_000_000,
-      });
-
-      await expect(sut.getStorage()).resolves.toEqual({
-        diskAvailable: '266.5 PiB',
-        diskAvailableRaw: 300_000_000_000_000_000,
-        diskSize: '444.1 PiB',
-        diskSizeRaw: 500_000_000_000_000_000,
-        diskUsagePercentage: 60,
-        diskUse: '266.5 PiB',
-        diskUseRaw: 300_000_000_000_000_000,
-      });
-
-      expect(mocks.storage.checkDiskUsage).toHaveBeenCalledWith(expect.stringContaining('/data/library'));
     });
   });
 

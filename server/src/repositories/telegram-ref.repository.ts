@@ -114,6 +114,15 @@ export class TelegramRefRepository {
     return Number(row.n);
   }
 
+  /** Total bytes stored in Telegram across every mapped part. */
+  async totalBytes(): Promise<number> {
+    const row = await this.db
+      .selectFrom('telegram_ref')
+      .select((eb) => eb.fn.coalesce(eb.fn.sum<number>('size'), eb.lit(0)).as('bytes'))
+      .executeTakeFirstOrThrow();
+    return Number(row.bytes);
+  }
+
   async countAssets(): Promise<number> {
     const rows = await this.db
       .selectFrom('telegram_ref')

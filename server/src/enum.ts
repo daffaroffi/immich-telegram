@@ -392,6 +392,7 @@ export enum SystemMetadataKey {
   VersionCheckState = 'version-check-state',
   License = 'license',
   IntegrityChecksumCheckpoint = 'integrity-checksum-checkpoint',
+  TelegramStorage = 'telegram-storage',
 }
 
 export enum UserMetadataKey {
