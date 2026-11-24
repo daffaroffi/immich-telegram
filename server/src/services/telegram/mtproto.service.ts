@@ -211,6 +211,16 @@ export class TelegramMtprotoService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  /**
+   * Recent document/media messages from the storage chat, newest first.
+   * Used by the importer to discover files that already live in Telegram.
+   */
+  async listChatMessages(limit: number): Promise<any[]> {
+    const config = this.assertConfigured();
+    const client = await this.ensureClient();
+    return client.getMessages(config.chatId.toString(), { limit });
+  }
+
   /** Download a previously uploaded file into a local path. */
   async downloadFile(messageId: number, targetPath: string): Promise<number> {
     const config = this.assertConfigured();

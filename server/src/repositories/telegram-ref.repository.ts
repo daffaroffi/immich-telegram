@@ -124,6 +124,17 @@ export class TelegramRefRepository {
     return this.db.selectFrom('telegram_ref').selectAll().orderBy('uploadedAt', 'desc').limit(limit).execute();
   }
 
+  /** True when a telegram part already points at this chat message. */
+  async hasByMessageId(messageId: number): Promise<boolean> {
+    const row = await this.db
+      .selectFrom('telegram_ref')
+      .select('assetId')
+      .where('messageId', '=', messageId)
+      .limit(1)
+      .executeTakeFirst();
+    return !!row;
+  }
+
   /** Assets that still need a telegram backup, with the path to upload from. */
   async listPendingUpload(limit: number): Promise<{ assetId: string; originalPath: string }[]> {
     return this.db

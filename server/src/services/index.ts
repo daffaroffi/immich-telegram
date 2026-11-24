@@ -44,6 +44,7 @@ import { SystemConfigService } from 'src/services/system-config.service.js';
 import { SystemMetadataService } from 'src/services/system-metadata.service.js';
 import { TagService } from 'src/services/tag.service.js';
 import { TelegramCryptoService } from 'src/services/telegram/crypto.service.js';
+import { TelegramImporterService } from 'src/services/telegram/importer.service.js';
 import { TelegramMtprotoService } from 'src/services/telegram/mtproto.service.js';
 import { TelegramRestoreService } from 'src/services/telegram/restore.service.js';
 import { TelegramSyncService } from 'src/services/telegram/sync.service.js';
@@ -105,6 +106,7 @@ export const services = [
   SystemMetadataService,
   TagService,
   TelegramCryptoService,
+  TelegramImporterService,
   TelegramMtprotoService,
   TelegramRestoreService,
   TelegramSyncService,
