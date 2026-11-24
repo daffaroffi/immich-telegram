@@ -100,8 +100,7 @@ jobs:
           - image: immich-machine-learning
             device: openvino
             suffixes: '-openvino'
-            platforms: linux/amd64
-            runner-mapping: '{"linux/amd64": "pokedex-large"}'
+
           - image: immich-machine-learning
             device: armnn
             suffixes: '-armnn'
@@ -113,8 +112,7 @@ jobs:
           - image: immich-machine-learning
             device: rocm
             suffixes: '-rocm'
-            platforms: linux/amd64
-            runner-mapping: '{"linux/amd64": "pokedex-large"}'
+
     steps:
       - name: Login to GitHub Container Registry
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
@@ -179,7 +177,6 @@ jobs:
       context: machine-learning
       dockerfile: machine-learning/Dockerfile
       platforms: ${{ matrix.platforms }}
-      runner-mapping: ${{ matrix.runner-mapping }}
       suffixes: ${{ matrix.suffixes }}
       tags: &tag-rules |
         type=ref,event=branch,enable=${{ !startsWith(github.ref, 'refs/heads/release/') }}
