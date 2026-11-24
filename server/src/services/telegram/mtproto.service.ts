@@ -247,26 +247,13 @@ export class TelegramMtprotoService implements OnModuleInit, OnModuleDestroy {
 
   /** Download a previously uploaded file into a local path. */
   async downloadFile(messageId: number, targetPath: string): Promise<number> {
-    const config = this.assertConfigured();
-    const client = await this.ensureClient();
-
-    return this.withFloodWait('download', async () => {
-      const messages = await client.getMessages(config.chatId.toString(), { ids: [messageId] });
-      const message = messages?.[0];
-      if (!message?.media) {
-        throw new Error(`Telegram message ${messageId} has no media`);
-      }
-
-      await mkdir(dirname(targetPath), { recursive: true });
-      const buffer = await client.downloadMedia(message);
-      if (!Buffer.isBuffer(buffer)) {
-        throw new Error(`Telegram download for message ${messageId} did not return a buffer`);
-      }
-
-      await writeFile(targetPath, buffer);
-      this.logger.log(`Downloaded message ${messageId} to ${targetPath} (${buffer.length} bytes)`);
-      return buffer.length;
-    });
+    try {
+      return await this.downloadMessageMedia(this.assertConfigured().chatId.toString(), messageId, targetPath);
+    } catch (error: unknown) {
+      // Files imported from Saved Messages live in the 'me' peer, not the storage chat.
+      this.logger.warn(`downloadFile(${messageId}) missed in chat, trying Saved Messages: ${error}`);
+      return this.downloadMessageMedia('me', messageId, targetPath);
+    }
   }
 
   /**
