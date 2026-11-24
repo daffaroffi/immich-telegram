@@ -12,6 +12,7 @@ import { TelegramSyncService } from 'src/services/telegram/sync.service.js';
 class TelegramImportOptionsDto {
   limit?: number;
   dryRun?: boolean;
+  source?: 'chat' | 'self';
 }
 
 @ApiTags(ApiTag.Maintenance)
@@ -53,24 +54,25 @@ export class TelegramAdminController {
   @Get('chat-files')
   @Authenticated({ permission: Permission.SystemMetadataRead, admin: true })
   @Endpoint({
-    summary: 'List files already present in the telegram storage chat',
+    summary: 'List files already present in the telegram storage chat or Saved Messages',
     history: new HistoryBuilder().added('v3.4'),
   })
-  async chatFiles(@Auth() _auth: AuthDto, @Query('limit') limit?: string) {
-    const files = await this.importer.listChatDocuments(Number(limit) || 500);
+  async chatFiles(@Auth() _auth: AuthDto, @Query('limit') limit?: string, @Query('source') source?: string) {
+    const files = await this.importer.listChatDocuments(Number(limit) || 500, source === 'self');
     return { count: files.length, files };
   }
 
   @Post('import')
   @Authenticated({ permission: Permission.SystemMetadataUpdate, admin: true })
   @Endpoint({
-    summary: 'Import files already present in the telegram storage chat into the timeline',
+    summary: 'Import files already present in the telegram storage chat or Saved Messages into the timeline',
     history: new HistoryBuilder().added('v3.4'),
   })
   async import(@Auth() auth: AuthDto, @Body() dto: TelegramImportOptionsDto) {
     return this.importer.importExisting(auth.user.id, {
       limit: dto?.limit ?? 500,
       dryRun: dto?.dryRun ?? false,
+      source: dto?.source === 'self' ? 'self' : 'chat',
     });
   }
 }

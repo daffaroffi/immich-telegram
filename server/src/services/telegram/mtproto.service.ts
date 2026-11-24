@@ -215,10 +215,34 @@ export class TelegramMtprotoService implements OnModuleInit, OnModuleDestroy {
    * Recent document/media messages from the storage chat, newest first.
    * Used by the importer to discover files that already live in Telegram.
    */
-  async listChatMessages(limit: number): Promise<any[]> {
+  async listChatMessages(limit: number, fromSelf = false): Promise<any[]> {
     const config = this.assertConfigured();
     const client = await this.ensureClient();
-    return client.getMessages(config.chatId.toString(), { limit });
+    if (!fromSelf) {
+      return client.getMessages(config.chatId.toString(), { limit });
+    }
+    // 'me' resolves to the account's own Saved Messages chat
+    const me = await client.getEntity('me');
+    return client.getMessages(me, { limit });
+  }
+
+  /** Download a stored document from an arbitrary peer (chat id or 'me'). */
+  async downloadMessageMedia(peer: string, messageId: number, targetPath: string): Promise<number> {
+    const client = await this.ensureClient();
+    return this.withFloodWait('download', async () => {
+      const messages = await client.getMessages(peer, { ids: [messageId] });
+      const message = messages?.[0];
+      if (!message?.media) {
+        throw new Error(`Telegram message ${messageId} has no media`);
+      }
+      await mkdir(dirname(targetPath), { recursive: true });
+      const buffer = await client.downloadMedia(message);
+      if (!Buffer.isBuffer(buffer)) {
+        throw new Error(`Telegram download for message ${messageId} did not return a buffer`);
+      }
+      await writeFile(targetPath, buffer);
+      return buffer.length;
+    });
   }
 
   /** Download a previously uploaded file into a local path. */

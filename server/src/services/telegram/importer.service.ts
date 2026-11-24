@@ -53,19 +53,24 @@ export class TelegramImporterService {
 
   async importExisting(
     ownerId: string,
-    options: { limit?: number; dryRun?: boolean } = {},
+    options: { limit?: number; dryRun?: boolean; source?: 'chat' | 'self' } = {},
   ): Promise<TelegramImportResult> {
     const config = this.configRepository.getEnv().telegram;
     if (!config.enabled) {
       throw new Error('Telegram storage is not enabled');
     }
 
-    const files = await this.listChatDocuments(options.limit ?? 500);
+    const source = options.source ?? 'chat';
+    const files = await this.listChatDocuments(options.limit ?? 500, source === 'self');
     const result: TelegramImportResult = { scanned: files.length, imported: 0, skipped: 0, failed: 0, errors: [] };
     const vaultKey = config.vaultKey;
 
     for (const file of files) {
       try {
+        if (this.isImmichTestArtifact(file.fileName)) {
+          result.skipped++;
+          continue;
+        }
         if (await this.refRepository.hasByMessageId(file.messageId)) {
           result.skipped++;
           continue;
@@ -74,7 +79,7 @@ export class TelegramImporterService {
           result.imported++;
           continue;
         }
-        const imported = await this.importFile(ownerId, file, vaultKey);
+        const imported = await this.importFile(ownerId, file, vaultKey, source);
         if (imported) {
           result.imported++;
         } else {
@@ -89,15 +94,14 @@ export class TelegramImporterService {
     }
 
     this.logger.log(
-      `Telegram import finished: ${result.imported} imported, ${result.skipped} skipped, ${result.failed} failed`,
+      `Telegram import (${source}) finished: ${result.imported} imported, ${result.skipped} skipped, ${result.failed} failed`,
     );
     return result;
   }
 
-  /** Documents in the storage chat, oldest first. */
-  async listChatDocuments(limit: number): Promise<TelegramImportFile[]> {
-    const config = this.configRepository.getEnv().telegram;
-    const messages = await this.mtproto.listChatMessages(limit);
+  /** Documents in the storage chat (source='chat') or Saved Messages (source='self'), oldest first. */
+  async listChatDocuments(limit: number, fromSelf = false): Promise<TelegramImportFile[]> {
+    const messages = await this.mtproto.listChatMessages(limit, fromSelf);
     const files: TelegramImportFile[] = [];
 
     for (const message of messages) {
@@ -118,11 +122,25 @@ export class TelegramImporterService {
     return files.sort((a, b) => a.date.getTime() - b.date.getTime());
   }
 
-  private async importFile(ownerId: string, file: TelegramImportFile, vaultKey: Buffer | null): Promise<boolean> {
+  /** Files Immich itself uploaded during tests; not user content. */
+  private isImmichTestArtifact(fileName: string): boolean {
+    return /^(e2e-|.*\.part\d+\.bin$|p\d+\.bin$)/.test(fileName);
+  }
+
+  private async importFile(
+    ownerId: string,
+    file: TelegramImportFile,
+    vaultKey: Buffer | null,
+    source: 'chat' | 'self' = 'chat',
+  ): Promise<boolean> {
     const workDir = await mkdtemp(join(tmpdir(), 'tg-import-'));
     const downloadPath = join(workDir, 'part.bin');
     try {
-      await this.mtproto.downloadFile(file.messageId, downloadPath);
+      if (source === 'self') {
+        await this.mtproto.downloadMessageMedia('me', file.messageId, downloadPath);
+      } else {
+        await this.mtproto.downloadFile(file.messageId, downloadPath);
+      }
 
       let plainPath = downloadPath;
       if (vaultKey) {
