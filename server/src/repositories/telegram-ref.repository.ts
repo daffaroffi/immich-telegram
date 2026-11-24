@@ -20,7 +20,7 @@ export interface TelegramRefPartCreate {
   partIndex: number;
   totalParts: number;
   messageId: number;
-  chatId: bigint;
+  chatId: bigint | string;
   size: number;
   checksum?: string | null;
   encrypted?: boolean;
@@ -32,7 +32,7 @@ export interface TelegramRefSummary {
   totalParts: number;
   encrypted: boolean;
   checksum: string | null;
-  parts: { partIndex: number; messageId: number; chatId: bigint; size: number }[];
+  parts: { partIndex: number; messageId: number; chatId: bigint | string; size: number }[];
 }
 
 export class TelegramRefRepository {
@@ -40,12 +40,14 @@ export class TelegramRefRepository {
 
   /** Insert (or replace) one part. Idempotent on (assetId, partIndex). */
   async createPart(part: TelegramRefPartCreate): Promise<void> {
+    // chatId 'me' (Saved Messages) has no numeric id in our schema — store sentinel 0.
+    const chatIdValue = part.chatId === 'me' ? 0 : Number(part.chatId);
     const values = {
       assetId: asUuid(part.assetId),
       partIndex: part.partIndex,
       totalParts: part.totalParts,
       messageId: part.messageId,
-      chatId: Number(part.chatId),
+      chatId: chatIdValue,
       size: part.size,
       checksum: part.checksum ?? null,
       encrypted: part.encrypted ?? true,
@@ -57,7 +59,7 @@ export class TelegramRefRepository {
         oc.columns(['assetId', 'partIndex']).doUpdateSet({
           totalParts: part.totalParts,
           messageId: part.messageId,
-          chatId: Number(part.chatId),
+          chatId: chatIdValue,
           size: part.size,
           checksum: part.checksum ?? null,
           encrypted: part.encrypted ?? true,
@@ -85,7 +87,7 @@ export class TelegramRefRepository {
       parts: rows.map((row) => ({
         partIndex: row.partIndex,
         messageId: row.messageId,
-        chatId: BigInt(row.chatId),
+        chatId: String(row.chatId) === '0' ? 'me' : BigInt(row.chatId),
         size: Number(row.size),
       })),
     };

@@ -159,11 +159,13 @@ export class TelegramImporterService {
       }
 
       let plainPath = downloadPath;
+      let wasDecrypted = false;
       if (vaultKey) {
         const decryptedPath = join(workDir, 'plain.bin');
         try {
           await this.crypto.decryptFile(downloadPath, decryptedPath, vaultKey);
           plainPath = decryptedPath;
+          wasDecrypted = true;
         } catch {
           // raw (unencrypted) document — keep the downloaded bytes as-is
           plainPath = downloadPath;
@@ -175,7 +177,7 @@ export class TelegramImporterService {
         return false;
       }
 
-      await this.registerAsset(ownerId, file, plainPath, info.size, vaultKey !== null);
+      await this.registerAsset(ownerId, file, plainPath, info.size, vaultKey !== null, wasDecrypted && source === 'self');
       return true;
     } finally {
       await rm(workDir, { recursive: true, force: true });
@@ -188,6 +190,7 @@ export class TelegramImporterService {
     plainPath: string,
     size: number,
     encrypted: boolean,
+    importedFromSelf = false,
   ): Promise<void> {
     const { StorageCore } = await import('src/cores/storage.core.js');
     const { mimeTypes } = await import('src/utils/mime-types.js');
@@ -241,7 +244,7 @@ export class TelegramImporterService {
       partIndex: 0,
       totalParts: 1,
       messageId: file.messageId,
-      chatId: this.configRepository.getEnv().telegram.chatId,
+      chatId: importedFromSelf ? 'me' : this.configRepository.getEnv().telegram.chatId,
       size,
       checksum: checksum.toString('hex'),
       encrypted,

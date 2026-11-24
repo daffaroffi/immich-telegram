@@ -65,7 +65,12 @@ export class TelegramRestoreService {
     try {
       for (const part of summary.parts) {
         const downloaded = join(workDir, `part-${part.partIndex}.bin`);
-        await this.mtproto.downloadFile(part.messageId, downloaded);
+        // part.chatId is 'me' for files imported from Saved Messages, otherwise the storage chat id.
+        if (part.chatId === 'me') {
+          await this.mtproto.downloadMessageMedia('me', part.messageId, downloaded);
+        } else {
+          await this.mtproto.downloadFile(part.messageId, downloaded);
+        }
 
         if (summary.encrypted) {
           const decrypted = join(workDir, `plain-${part.partIndex}.bin`);
