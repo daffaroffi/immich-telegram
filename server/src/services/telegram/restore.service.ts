@@ -72,15 +72,23 @@ export class TelegramRestoreService {
           await this.mtproto.downloadFile(part.messageId, downloaded);
         }
 
-        if (summary.encrypted) {
+        let plain = downloaded;
+        if (summary.encrypted && vaultKey) {
           const decrypted = join(workDir, `plain-${part.partIndex}.bin`);
-          await this.crypto.decryptFile(downloaded, decrypted, vaultKey!);
-          await rm(downloaded, { force: true });
-          await pipeline(createReadStream(decrypted), createWriteStream(path, { flags: 'a' }));
-          await rm(decrypted, { force: true });
-        } else {
-          await pipeline(createReadStream(downloaded), createWriteStream(path, { flags: 'a' }));
-          await rm(downloaded, { force: true });
+          try {
+            await this.crypto.decryptFile(downloaded, decrypted, vaultKey);
+            plain = decrypted;
+          } catch {
+            // ref flagged encrypted but the stored document is raw (e.g. files the user
+            // uploaded straight to Telegram) — fall back to the downloaded bytes.
+            plain = downloaded;
+          }
+        }
+
+        await pipeline(createReadStream(plain), createWriteStream(path, { flags: 'a' }));
+        await rm(downloaded, { force: true });
+        if (plain !== downloaded) {
+          await rm(plain, { force: true });
         }
       }
       this.logger.log(`Restored ${assetId} from ${summary.parts.length} telegram part(s)`);
