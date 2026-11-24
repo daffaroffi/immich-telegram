@@ -53,7 +53,15 @@ export class TelegramImporterService {
 
   async importExisting(
     ownerId: string,
-    options: { limit?: number; dryRun?: boolean; source?: 'chat' | 'self' } = {},
+    options: {
+      limit?: number;
+      dryRun?: boolean;
+      source?: 'chat' | 'self';
+      /** only import files up to this size (bytes) — lets a small disk import in passes */
+      maxBytes?: number;
+      /** skip video files (big) and import photos/documents first */
+      skipVideos?: boolean;
+    } = {},
   ): Promise<TelegramImportResult> {
     const config = this.configRepository.getEnv().telegram;
     if (!config.enabled) {
@@ -72,6 +80,14 @@ export class TelegramImporterService {
           continue;
         }
         if (await this.refRepository.hasByMessageId(file.messageId)) {
+          result.skipped++;
+          continue;
+        }
+        if (options.skipVideos && /\.(mp4|mov|mkv|webm|avi|m4v)$/i.test(file.fileName)) {
+          result.skipped++;
+          continue;
+        }
+        if (options.maxBytes !== undefined && file.size > options.maxBytes) {
           result.skipped++;
           continue;
         }

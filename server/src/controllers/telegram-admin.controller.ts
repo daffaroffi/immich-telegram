@@ -13,6 +13,8 @@ class TelegramImportOptionsDto {
   limit?: number;
   dryRun?: boolean;
   source?: 'chat' | 'self';
+  maxBytes?: number;
+  skipVideos?: boolean;
 }
 
 @ApiTags(ApiTag.Maintenance)
@@ -73,6 +75,8 @@ export class TelegramAdminController {
       limit: dto?.limit ?? 500,
       dryRun: dto?.dryRun ?? false,
       source: dto?.source === 'self' ? 'self' : 'chat',
+      maxBytes: dto?.maxBytes,
+      skipVideos: dto?.skipVideos ?? false,
     });
   }
 }
